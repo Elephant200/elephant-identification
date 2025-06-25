@@ -1,0 +1,9 @@
+requests
+bs4
+tqdm
+pandas
+scikit-learn
+numpy
+matplotlib
+seaborn
+keras
