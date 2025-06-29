@@ -3,3 +3,6 @@ elephant_images/
 all_elephant_images/
 
 .DS_Store
+
+.env
+.venv/
