@@ -27,7 +27,7 @@ def get_images(orphan_name: str) -> list[str]:
         print(f"Error getting images for {orphan_name}: {e}")
         return []
     
-def download_images(orphan_name: str, output_dir: str = "elephant_images") -> int:
+def download_images(orphan_name: str, output_dir: str = "all_elephant_images") -> int:
     """
     Download the images for an orphan from the SWT website.
 
