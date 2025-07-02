@@ -1,6 +1,5 @@
-# Ignore files in elephant_images directory to avoid committing large files
-elephant_images/
-all_elephant_images/
+# Ignore image directories
+images/
 
 .DS_Store
 
