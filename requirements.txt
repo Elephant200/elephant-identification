@@ -8,3 +8,6 @@ matplotlib
 seaborn
 keras
 python-dotenv
+opencv-python
+supervision
+inference
