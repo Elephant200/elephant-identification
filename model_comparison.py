@@ -80,7 +80,7 @@ while True:
         print("Invalid selection")
         continue
 
-    for image_path in image_paths:
+    for i, image_path in enumerate(image_paths):
         image = cv2.imread(image_path)
         if image is None:
             raise FileNotFoundError(f"Image not found at path: {image_path}")
@@ -97,21 +97,29 @@ while True:
             overlay = box_annotator.annotate(scene=overlay, detections=detections)
             overlay = label_annotator.annotate(scene=overlay, detections=detections, labels=labels)
 
+        # Resize image to base_width width
+        base_width = 1920
+        overlay = cv2.resize(overlay, (base_width, int(overlay.shape[0] * base_width / overlay.shape[1])))
+        
         legend_height = 30 * len(model_versions) + 20
         legend_width = 200
-        legend_x = 10
+        legend_x = overlay.shape[1] + 10
         legend_y = 10
+
+        overlay = np.pad(overlay, ((0, 0), (0, legend_width + 20), (0, 0)), mode="constant", constant_values=255)
+        
+        print(overlay.shape, legend_x, legend_y, legend_width, legend_height, sep="\n")
 
         cv2.rectangle(overlay, (legend_x, legend_y), (legend_x + legend_width, legend_y + legend_height), (255, 255, 255), -1)
         cv2.rectangle(overlay, (legend_x, legend_y), (legend_x + legend_width, legend_y + legend_height), (0, 0, 0), 2)
 
         cv2.putText(overlay, "Model Versions", (legend_x + 10, legend_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
 
-        for i, (version, color) in enumerate(zip(model_versions, colors)):
-            y_pos = legend_y + 40 + i * 25
+        for j, (version, color) in enumerate(zip(model_versions, colors)):
+            y_pos = legend_y + 40 + j * 25
             cv2.rectangle(overlay, (legend_x + 10, y_pos - 10), (legend_x + 30, y_pos + 10), (color.b, color.g, color.r), -1)
             cv2.putText(overlay, f"v{version}", (legend_x + 40, y_pos + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
 
-        cv2.imshow(f"Model Comparison {image_path.split('/')[-1]}", overlay)
+        cv2.imshow(f"Model Comparison (Image: {image_path.split('/')[-1]}) [{i+1}/{len(image_paths)}]", overlay)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
