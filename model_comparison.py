@@ -81,6 +81,7 @@ while True:
         continue
 
     for i, image_path in enumerate(image_paths):
+        print(f"--------------------------{i+1}/{len(image_paths)}---------------------------")
         image = cv2.imread(image_path)
         if image is None:
             raise FileNotFoundError(f"Image not found at path: {image_path}")
