@@ -18,4 +18,8 @@ def get_progress(orphan_name: str) -> int:
     """
     return sum(orphans[key] for key in orphans.keys() if key <= orphan_name)
 
+def get_length():
+    return sum(orphans.values())
+
+print(get_length())
 print(get_progress("kainuk"))
