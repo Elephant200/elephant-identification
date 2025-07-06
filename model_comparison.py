@@ -7,6 +7,7 @@ from inference import get_model
 import supervision as sv
 from tqdm import tqdm
 from pprint import pprint
+from utility import pad_with_char
 
 load_dotenv()
 api_key = os.getenv("ROBOFLOW_API_KEY")
@@ -14,7 +15,17 @@ if api_key is None:
     raise ValueError("ROBOFLOW_API_KEY not found in .env file")
 
 project_id = "elephant-identification-research"
-model_versions = ["5", "7", "12", "13", "14", "15", "16"]
+model_versions = ["12", "13", "14", "15", "16"]
+model_to_color = {
+    "5": sv.Color(255, 0, 0),
+    "7": sv.Color(255, 255, 0),
+    "12": sv.Color(0, 255, 0),
+    "13": sv.Color(0, 255, 255),
+    "14": sv.Color(0, 0, 255),
+    "15": sv.Color(255, 0, 255),
+    "16": sv.Color(0, 0, 0),
+}
+colors = [model_to_color[version] for version in model_versions]
 
 models = [
     get_model(f"{project_id}/{version}", api_key=api_key)
@@ -64,8 +75,6 @@ def generate_colors(n: int) -> list[sv.Color]:
     
     return colors
 
-colors = generate_colors(6) + [sv.Color(0, 0, 0)]
-
 annotators = [(sv.BoxAnnotator(color=color), sv.LabelAnnotator(color=color)) for color in colors]
 
 while True:
@@ -92,6 +101,7 @@ while True:
             results = model.infer(image)[0]
             detections = sv.Detections.from_inference(results)
             detection = [d for d in detections]
+            print(detections.xyxy)
             print(f"--------------------------------{version}--------------------------------")
             pprint(detection)
             labels = [f"v{version} {d[2]:.2f}%" for d in detections]
