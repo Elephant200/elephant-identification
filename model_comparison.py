@@ -80,7 +80,20 @@ annotators = [(sv.BoxAnnotator(color=color), sv.LabelAnnotator(color=color)) for
 while True:
     selection = input("Enter image selection method:\n[1] Random\n[2] Choose\n[3] Quit\n")
     if selection == "1":
-        image_paths = ["images/ELPephants/" + random.choice(os.listdir("images/ELPephants")) for _ in range(int(input("Enter # images: ")))]
+        base_path = "images/all_elephant_images/"
+        image_paths = []
+        if input("Include sheldrick images? (y/n): ").lower() != "n":
+            for folder in os.listdir(base_path):
+                try:
+                    for image_path in os.listdir(os.path.join(base_path, folder)):
+                        image_paths.append(os.path.join(base_path, folder, image_path))
+                except NotADirectoryError:
+                    continue
+        if input("Include ELPephants? (y/n): ").lower() != "n":
+            for image_path in os.listdir("images/ELPephants"):
+                image_paths.append(f"images/ELPephants/{image_path}")
+        random.shuffle(image_paths)
+        image_paths = image_paths[:int(input("Enter # images: "))]
     elif selection == "2":
         image_paths = input("Enter image paths:")[1:-1].split("''")
     elif selection == "3":
