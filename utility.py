@@ -1,4 +1,5 @@
 import os
+import random
 
 def pad_with_char(*values: str, char: str = "=", sep: str = " ") -> str:
     """
@@ -67,37 +68,69 @@ def get_list_of_files(prompt: str, *, input_method: str | None = None) -> list[s
                 raise ValueError("Invalid input method.")
     if input_method == "1":
         while True:
-            files = input(prompt)
-            print("Please drag and drop files from finder into the terminal, so that they are enclosed in single quotes. Do not separate with spaces.")
+            print(prompt)
+            print("Please drag and drop files from finder into the terminal.")
+            files_input = input()
             try:
-                files = files[1:-1].split("''")
+                files = files_input[1:-1].split("''")
                 if all(os.path.isfile(file) for file in files):
                     return files
                 else:
-                    raise FileNotFoundError("One or more files not found.")
-            except:
-                print("Please enter a valid list of files.")
+                    missing_files = [file for file in files if not os.path.isfile(file)]
+                    print(f"The following files were not found: {missing_files}")
+                    print("Please try again.")
+            except Exception as e:
+                print(f"Error parsing file paths: {e}")
+                print("Please try again.")
     elif input_method == "2":
-        while True:
-            base_path = input("Enter the base path of the files, or leave it blank if the files are in the current directory: ")
-            if base_path == "":
-                base_path = os.getcwd()
-            if os.path.isdir(base_path):
-                break
-            else:
-                print("Please enter a valid directory.")
-        files = []
-        print(prompt)
-        print("Type Q to finish.")
-        while True:
-            file = input()
-            if file == "Q":
-                break
-            if os.path.isfile(os.path.join(base_path, file)):
-                files.append(os.path.join(base_path, file))
-            else:
-                print("Please enter a valid file.")
-        return files
+        return get_files_from_dir(prompt, randomize=False)
+
+def get_files_from_dir(prompt: str, base_path: str | None = None, randomize: bool = False) -> list[str]:
+    """
+    Gets a list of files from a directory.
+
+    Args:
+        prompt (str): The prompt to display to the user. Do not include a colon or newline at the end.
+        base_path (str): The base path of the files. If None, the function will prompt the user to enter it.
+        randomize (bool): Whether to randomize the files. Defaults to False.
+
+    Returns:
+        list[str]: The list of files in the directory.
+    """
+    while base_path is None:
+        base_path = input("Enter the base path of the files, or leave it blank if the files are in the current directory: ")
+        if base_path == "":
+            base_path = os.getcwd()
+        if os.path.isdir(base_path):
+            break
+        else:
+            print("Please enter a valid directory.")
+            base_path = None
+    
+    if randomize:
+        sample_size = get_int("Enter the number of files to sample: ")
+        possible_files = [file for file in os.listdir(base_path) if file.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'))]
+        if len(possible_files) < sample_size:
+            print(f"There are only {len(possible_files)} files in the directory. Returning all files.")
+            selected_files = possible_files
+        else:
+            selected_files = random.sample(possible_files, sample_size)
+        
+        # Return full paths, not just filenames
+        return [os.path.join(base_path, file) for file in selected_files]
+
+    files = []
+    print(prompt)
+    print("Type Q to finish.")
+    while True:
+        file = input()
+        if file == "Q":
+            break
+        if os.path.isfile(os.path.join(base_path, file)):
+            files.append(os.path.join(base_path, file))
+        else:
+            print("Please enter a valid file.")
+    return files
 
 def get_multiple_choice(prompt: str, choices: list[str] = ["Yes", "No"], auto_lower: bool = True, first_letter_only: bool | None = None, default_choice: str | None = None) -> str:
     """
