@@ -1,4 +1,4 @@
-import os
+import os # AHMED 8, AITONG 2, AITONG 5
 import random
 import cv2
 import numpy as np
@@ -7,7 +7,7 @@ from inference import get_model
 import supervision as sv
 from tqdm import tqdm
 from pprint import pprint
-from utility import pad_with_char
+from utility import pad_with_char, get_list_of_files, get_multiple_choice, get_int, get_list_of_ints, get_files_from_dir
 
 load_dotenv()
 api_key = os.getenv("ROBOFLOW_API_KEY")
@@ -15,7 +15,20 @@ if api_key is None:
     raise ValueError("ROBOFLOW_API_KEY not found in .env file")
 
 project_id = "elephant-identification-research"
-model_versions = ["13", "16", "17", "18", "19", "20"]
+presets = {
+    "Best of Each Type": ["13", "20"],
+    "Original": ["5", "7", "12", "13", "14", "15", "16"],
+    "Less-Augmented": ["15", "16", "19", "20"],
+    "New": ["17", "18", "19", "20"],
+    "Cyan + New": ["13", "17", "18", "19", "20"],
+    "Cyan + Black + New": ["13", "16", "17", "18", "19", "20"],
+    "All": ["5", "7", "12", "13", "14", "15", "16", "17", "18", "19", "20"],
+}
+if get_multiple_choice("Would you like to use a preset group of models? (y/n): ", default_choice="Yes") == "Yes":
+    model_versions = presets[get_multiple_choice("Please select a preset. Choices are:\n" + "\n".join(presets.keys()) + "\n", choices=list(presets.keys()))]
+else:
+    model_versions = get_list_of_ints("Please enter the model versions below.\n")
+
 model_to_color = {
     "5": sv.Color(255, 0, 0),
     "7": sv.Color(255, 255, 0),
@@ -29,12 +42,24 @@ model_to_color = {
     "19": sv.Color(128, 255, 128),
     "20": sv.Color(128, 128, 255),
 }
-colors = [model_to_color[version] for version in model_versions]
 
-models = [
-    get_model(f"{project_id}/{version}", api_key=api_key)
-    for version in tqdm(model_versions, desc="Loading models")
-]
+def load_models(model_versions: list[str | int]) -> tuple[list, list[sv.Color], list[tuple[sv.BoxAnnotator, sv.LabelAnnotator]]]:
+    """
+    Get the models and colors for a list of model versions.
+
+    Args:
+        model_versions (list[str | int]): List of model versions.
+
+    Returns:
+        tuple[list[Model], list[sv.Color], tuple[sv.BoxAnnotator, sv.LabelAnnotator]]: Tuple of lists of models and colors.
+    """
+    models = [
+        get_model(f"{project_id}/{version}", api_key=api_key)
+        for version in tqdm(model_versions, desc="Loading models")
+    ]
+    colors = [model_to_color[str(version)] for version in model_versions]
+    annotators = [(sv.BoxAnnotator(color=color), sv.LabelAnnotator(color=color)) for color in colors]
+    return models, colors, annotators
 
 def generate_colors(n: int) -> list[sv.Color]:
     """
@@ -79,41 +104,77 @@ def generate_colors(n: int) -> list[sv.Color]:
     
     return colors
 
-annotators = [(sv.BoxAnnotator(color=color), sv.LabelAnnotator(color=color)) for color in colors]
+models, colors, annotators = load_models(model_versions)
 
 while True:
-    selection = input("Enter image selection method:\n[1] Random\n[2] Choose (Drag and drop image paths)\n[3] Choose Sample from Directory\n[4] Quit\n")
+    selection = input("Enter image selection method:\n[1] Random\n[2] Choose (Drag and drop image paths)\n[3] Choose Sample from Directory\n[4] Edit model versions\n[5] Quit\n")
     if selection == "1":
         base_path = "images/all_elephant_images/"
         image_paths = []
-        if input("Include sheldrick images? (y/n): ").lower() != "n":
-            for folder in os.listdir(base_path):
-                try:
-                    for image_path in os.listdir(os.path.join(base_path, folder)):
-                        image_paths.append(os.path.join(base_path, folder, image_path))
-                except NotADirectoryError:
-                    continue
-        if input("Include ELPephants? (y/n): ").lower() != "n":
-            for image_path in os.listdir("images/ELPephants"):
-                image_paths.append(f"images/ELPephants/{image_path}")
-        random.shuffle(image_paths)
-        image_paths = image_paths[:int(input("Enter # images: "))]
+        if get_multiple_choice("Include sheldrick images? (y/n): ", default_choice="Yes") == "Yes":
+            if os.path.exists(base_path):
+                for folder in os.listdir(base_path):
+                    try:
+                        for image_path in os.listdir(os.path.join(base_path, folder)):
+                            if image_path.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff')):
+                                image_paths.append(os.path.join(base_path, folder, image_path))
+                    except NotADirectoryError:
+                        continue
+            else:
+                print(f"Directory {base_path} does not exist.")
+        if get_multiple_choice("Include ELPephants? (y/n): ", default_choice="Yes") == "Yes":
+            elpephants_path = "images/ELPephants"
+            if os.path.exists(elpephants_path):
+                for image_path in os.listdir(elpephants_path):
+                    if image_path.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff')):
+                        image_paths.append(f"{elpephants_path}/{image_path}")
+            else:
+                print(f"Directory {elpephants_path} does not exist.")
+        if image_paths:
+            random.shuffle(image_paths)
+            max_images = len(image_paths)
+            requested_images = get_int(f"Enter # images (max {max_images}): ")
+            if requested_images > max_images:
+                print(f"Only {max_images} images available. Using all available images.")
+                requested_images = max_images
+            image_paths = image_paths[:requested_images]
+        else:
+            print("No images found in the specified directories.")
+            continue
     elif selection == "2":
-        image_paths = input("Enter image paths (drag and drop from finder)\n")[1:-1].split("''")
+        image_paths = get_list_of_files("Please enter the image paths below.")
     elif selection == "3":
-        base_path = "/Users/kayoko/Documents/GitHub/elephant-identification/images/" + input("Enter directory path (e.g. ELPephants, elephant_images, tough-images, etc.)\n")
-        sample_size = input("Enter sample size: ")
-        sample_size = int(sample_size) if sample_size.isdigit() else len(os.listdir(base_path))
-        image_paths = []
-        for image_path in os.listdir(base_path):
-            image_paths.append(os.path.join(base_path, image_path))
-        random.shuffle(image_paths)
-        image_paths = image_paths[:sample_size]
+        image_paths = get_files_from_dir("Please enter the image paths below.", randomize=True)
     elif selection == "4":
+        if get_multiple_choice("Would you like to use a preset group of models? (y/n): ", default_choice="Yes") == "Yes":
+            model_versions = presets[get_multiple_choice("Please select a preset. Choices are:\n" + "\n".join([f"{i+1}. {preset}" for i, preset in enumerate(presets.keys())]), choices=list(presets.keys()))]
+        else:
+            model_versions = get_list_of_ints("Please enter the model versions below.\n")
+        models, colors, annotators = load_models(model_versions)
+        continue
+    elif selection == "5":
         break
     else:
         print("Invalid selection")
         continue
+
+    if not image_paths:
+        print("No images selected. Please try again.")
+        continue
+    
+    valid_image_paths = []
+    for image_path in image_paths:
+        if os.path.isfile(image_path):
+            valid_image_paths.append(image_path)
+        else:
+            print(f"Warning: File not found: {image_path}")
+    
+    if not valid_image_paths:
+        print("No valid image files found. Please try again.")
+        continue
+    
+    image_paths = valid_image_paths
+    print(f"Processing {len(image_paths)} images...")
 
     for i, image_path in enumerate(image_paths):
         print(f"--------------------------{i+1}/{len(image_paths)}---------------------------")
