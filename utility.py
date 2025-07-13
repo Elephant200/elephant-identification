@@ -133,6 +133,23 @@ def get_multiple_choice(prompt: str, choices: list[str] = ["Yes", "No"], auto_lo
         else:
             print(f"Please enter a valid choice. {'You may ignore case. ' if auto_lower else ''}{'You may use the first letter of the choice. ' if first_letter_only else ''}Valid choices are: {', '.join(choices)}")
 
+def get_list_of_ints(prompt: str, *, input_separator: str = ", ") -> list[int]:
+    """
+    Gets a list of integers from the user.
+
+    Args:
+        prompt (str): The prompt to display to the user. Include a colon or newline at the end.
+        input_separator (str): The separator between the integers. Defaults to ", ".
+
+    Returns:
+        list[int]: The list of integers entered by the user.
+    """
+    while True:
+        try:
+            return list(map(int, input(prompt).split(input_separator)))
+        except ValueError:
+            print(f"Please enter a valid list of integers separated by \"{input_separator}\".")
+
 if __name__ == "__main__":
     print(pad_with_char("This is a test!"))
     for i in range(10):
