@@ -15,7 +15,7 @@ if api_key is None:
     raise ValueError("ROBOFLOW_API_KEY not found in .env file")
 
 project_id = "elephant-identification-research"
-model_versions = ["12", "13", "14", "15", "16"]
+model_versions = ["13", "16", "17", "18", "19", "20"]
 model_to_color = {
     "5": sv.Color(255, 0, 0),
     "7": sv.Color(255, 255, 0),
@@ -24,6 +24,10 @@ model_to_color = {
     "14": sv.Color(0, 0, 255),
     "15": sv.Color(255, 0, 255),
     "16": sv.Color(0, 0, 0),
+    "17": sv.Color(255, 255, 255),
+    "18": sv.Color(255, 128, 128),
+    "19": sv.Color(128, 255, 128),
+    "20": sv.Color(128, 128, 255),
 }
 colors = [model_to_color[version] for version in model_versions]
 
@@ -78,7 +82,7 @@ def generate_colors(n: int) -> list[sv.Color]:
 annotators = [(sv.BoxAnnotator(color=color), sv.LabelAnnotator(color=color)) for color in colors]
 
 while True:
-    selection = input("Enter image selection method:\n[1] Random\n[2] Choose\n[3] Quit\n")
+    selection = input("Enter image selection method:\n[1] Random\n[2] Choose (Drag and drop image paths)\n[3] Choose Sample from Directory\n[4] Quit\n")
     if selection == "1":
         base_path = "images/all_elephant_images/"
         image_paths = []
@@ -95,8 +99,17 @@ while True:
         random.shuffle(image_paths)
         image_paths = image_paths[:int(input("Enter # images: "))]
     elif selection == "2":
-        image_paths = input("Enter image paths:")[1:-1].split("''")
+        image_paths = input("Enter image paths (drag and drop from finder)\n")[1:-1].split("''")
     elif selection == "3":
+        base_path = "/Users/kayoko/Documents/GitHub/elephant-identification/images/" + input("Enter directory path (e.g. ELPephants, elephant_images, tough-images, etc.)\n")
+        sample_size = input("Enter sample size: ")
+        sample_size = int(sample_size) if sample_size.isdigit() else len(os.listdir(base_path))
+        image_paths = []
+        for image_path in os.listdir(base_path):
+            image_paths.append(os.path.join(base_path, image_path))
+        random.shuffle(image_paths)
+        image_paths = image_paths[:sample_size]
+    elif selection == "4":
         break
     else:
         print("Invalid selection")
@@ -117,7 +130,7 @@ while True:
             print(detections.xyxy)
             print(f"--------------------------------{version}--------------------------------")
             pprint(detection)
-            labels = [f"v{version} {d[2]:.2f}%" for d in detections]
+            labels = [f"v{version} {round(d[2] * 100)}%" for d in detections]
             overlay = box_annotator.annotate(scene=overlay, detections=detections)
             overlay = label_annotator.annotate(scene=overlay, detections=detections, labels=labels)
 
