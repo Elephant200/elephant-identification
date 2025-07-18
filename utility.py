@@ -92,7 +92,7 @@ def get_files_from_dir(prompt: str, base_path: str | None = None, randomize: boo
     Args:
         prompt (str): The prompt to display to the user. Do not include a colon or newline at the end.
         base_path (str): The base path of the files. If None, the function will prompt the user to enter it.
-        randomize (bool): Whether to randomize the files. Defaults to False.
+        randomize (bool): Whether to randomly sample the files. If False, the user will be prompted to manually enter the file paths. Defaults to False.
 
     Returns:
         list[str]: The list of files in the directory.
@@ -147,11 +147,10 @@ def get_multiple_choice(prompt: str, choices: list[str] = ["Yes", "No"], auto_lo
         str: The response entered by the user.
     """
     first_letters = [choice[0].lower() if auto_lower else choice[0] for choice in choices]
-    if first_letter_only is None:
-        if len(set(first_letters)) != len(first_letters):
-            first_letter_only = False
-        else:
-            first_letter_only = True
+    if len(set(first_letters)) != len(first_letters):
+        first_letter_only = False
+    elif first_letter_only is None:
+        first_letter_only = True
     
     modified_choices = [choice.lower() if auto_lower else choice for choice in choices]
 
@@ -189,6 +188,18 @@ def get_list_of_ints(prompt: str, *, input_separator: str = ", ") -> list[int]:
             return list(map(int, input(prompt).split(input_separator)))
         except ValueError:
             print(f"Please enter a valid list of integers separated by \"{input_separator}\".")
+
+def is_image(file_path: str) -> bool:
+    """
+    Checks if a file is an image.
+
+    Args:
+        file_path (str): The path to the file.
+
+    Returns:
+        bool: True if the file is an image, False otherwise.
+    """
+    return file_path.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'))
 
 if __name__ == "__main__":
     print(pad_with_char("This is a test!"))
