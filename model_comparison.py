@@ -1,13 +1,24 @@
-import os # AHMED 8, AITONG 2, AITONG 5
+import os
 import random
+from pprint import pprint
+
 import cv2
 import numpy as np
 from dotenv import load_dotenv
 from inference import get_model
 import supervision as sv
 from tqdm import tqdm
-from pprint import pprint
-from utility import pad_with_char, get_list_of_files, get_multiple_choice, get_int, get_list_of_ints, get_files_from_dir
+
+from get_prediction import get_prediction
+from utility import (
+    get_files_from_dir,
+    get_int,
+    get_list_of_files,
+    get_list_of_ints,
+    get_multiple_choice,
+    is_image,
+    print_with_padding,
+)
 
 load_dotenv()
 api_key = os.getenv("ROBOFLOW_API_KEY")
@@ -116,7 +127,7 @@ while True:
                 for folder in os.listdir(base_path):
                     try:
                         for image_path in os.listdir(os.path.join(base_path, folder)):
-                            if image_path.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff')):
+                            if is_image(image_path):
                                 image_paths.append(os.path.join(base_path, folder, image_path))
                     except NotADirectoryError:
                         continue
@@ -126,7 +137,7 @@ while True:
             elpephants_path = "images/ELPephants"
             if os.path.exists(elpephants_path):
                 for image_path in os.listdir(elpephants_path):
-                    if image_path.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff')):
+                    if is_image(image_path):
                         image_paths.append(f"{elpephants_path}/{image_path}")
             else:
                 print(f"Directory {elpephants_path} does not exist.")
@@ -164,12 +175,15 @@ while True:
     
     valid_image_paths = []
     for image_path in image_paths:
-        if os.path.isfile(image_path):
-            valid_image_paths.append(image_path)
-        else:
+        if not os.path.isfile(image_path):
             print(f"Warning: File not found: {image_path}")
+            continue
+        if not is_image(image_path):
+            print(f"Warning: File is not an image: {image_path}")
+            continue
+        valid_image_paths.append(image_path)
     
-    if not valid_image_paths:
+    if len(valid_image_paths) == 0:
         print("No valid image files found. Please try again.")
         continue
     
@@ -177,7 +191,7 @@ while True:
     print(f"Processing {len(image_paths)} images...")
 
     for i, image_path in enumerate(image_paths):
-        print(f"--------------------------{i+1}/{len(image_paths)}---------------------------")
+        print_with_padding(f"{i+1}/{len(image_paths)}")
         image = cv2.imread(image_path)
         if image is None:
             raise FileNotFoundError(f"Image not found at path: {image_path}")
