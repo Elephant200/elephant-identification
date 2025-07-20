@@ -1,5 +1,6 @@
 import inference
 import supervision as sv
+import cv2
 from dotenv import load_dotenv
 import os
 
@@ -10,14 +11,12 @@ if api_key is None:
 
 def get_prediction(model_id: str, image_path: str) -> sv.Detections:
     model = inference.get_model(f"elephant-identification-research/{model_id}", api_key=api_key)
-    results = model.infer(image_path)[0]
+    image = cv2.imread(image_path)
+    results = model.infer(image)[0]
     detections = sv.Detections.from_inference(results)
     return detections
 
 if __name__ == "__main__":
-    import sys
-    
-    model_id = sys.argv[1]
-    image_path = sys.argv[2]
-
+    model_id = "20"
+    image_path = "images/all_elephant_images/ahmed/ahmed_8.jpg"
     print(get_prediction(model_id, image_path))
