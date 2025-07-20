@@ -10,7 +10,7 @@ import supervision as sv
 from tqdm import tqdm
 
 from get_prediction import get_prediction
-from utility import (
+from utils import (
     get_files_from_dir,
     get_int,
     get_list_of_files,

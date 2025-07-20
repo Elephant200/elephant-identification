@@ -13,7 +13,7 @@ import inference
 import supervision as sv
 from tqdm import tqdm
 
-from utility import print_with_padding, pad_with_char
+from utils import print_with_padding, pad_with_char
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

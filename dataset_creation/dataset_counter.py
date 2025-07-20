@@ -4,7 +4,7 @@ import json
 from matplotlib import pyplot as plt
 from pprint import pprint
 
-from utility import print_with_padding
+from utils import print_with_padding
 
 def get_frequency_distribution(data: dict) -> dict:
     """
@@ -93,5 +93,7 @@ cutoff = input("Enter a cutoff value: ")
 
 cut = {k: v for k, v in merged_elephants.items() if v >= int(cutoff)}
 
-print(sum(cut.values()))
+print("Images:    ", sum(cut.values()))
+print("Elephants: ", len(cut))
+
 draw_histogram(get_frequency_distribution(cut), "Cutoff elephants")
