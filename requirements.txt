@@ -11,3 +11,8 @@ python-dotenv
 opencv-python
 supervision
 inference
+timm
+PIL
+torch
+wildlife-tools
+pytorch-metric-learning
