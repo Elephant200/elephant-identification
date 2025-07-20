@@ -3,14 +3,16 @@ import supervision as sv
 import cv2
 from dotenv import load_dotenv
 import os
+from typing import Any
 
 load_dotenv()
 api_key = os.getenv("ROBOFLOW_API_KEY")
 if api_key is None:
     raise ValueError("ROBOFLOW_API_KEY not found in .env file")
 
-def get_prediction(model_id: str, image_path: str) -> sv.Detections:
-    model = inference.get_model(f"elephant-identification-research/{model_id}", api_key=api_key)
+def get_prediction(model: Any, image_path: str) -> sv.Detections:
+    if isinstance(model, str):
+        model = inference.get_model(f"elephant-identification-research/{model}", api_key=api_key)
     image = cv2.imread(image_path)
     results = model.infer(image)[0]
     detections = sv.Detections.from_inference(results)
