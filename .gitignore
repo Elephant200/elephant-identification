@@ -7,3 +7,5 @@ images/
 .venv/
 
 __pycache__/
+
+train_cache/
