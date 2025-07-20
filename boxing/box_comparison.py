@@ -27,7 +27,7 @@ if api_key is None:
 
 project_id = "elephant-identification-research"
 presets = {
-    "Best of Each Type": ["13", "20"],
+    "Best of Each Type": ["13", "16", "20"],
     "Original": ["5", "7", "12", "13", "14", "15", "16"],
     "Less-Augmented": ["15", "16", "19", "20"],
     "New": ["17", "18", "19", "20"],
@@ -199,10 +199,10 @@ while True:
         overlay = image.copy()
 
         for model, (box_annotator, label_annotator), version in zip(models, annotators, model_versions):
-            results = model.infer(image)[0]
-            detections = sv.Detections.from_inference(results)
+            detections = get_prediction(model, image_path)
             detection = [d for d in detections]
             print(detections.xyxy)
+            print(detections.class_id)
             print(f"--------------------------------{version}--------------------------------")
             pprint(detection)
             labels = [f"v{version} {round(d[2] * 100)}%" for d in detections]
