@@ -9,7 +9,7 @@ from inference import get_model
 import supervision as sv
 from tqdm import tqdm
 
-from get_prediction import get_prediction
+from boxing.get_prediction import get_prediction
 from utils import (
     get_files_from_dir,
     get_int,
