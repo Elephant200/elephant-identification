@@ -1,5 +1,5 @@
 """
-This script uses a consensus method with the Roboflow API to determine if an image definitively contains an elephant.
+This (old and outdated) script uses a consensus method with the Roboflow API to determine if an image definitively contains an elephant.
 """
 import logging
 import os
