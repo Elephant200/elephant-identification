@@ -4,18 +4,19 @@ import cv2
 from dotenv import load_dotenv
 import os
 import numpy as np
+from typing import Any
 
 load_dotenv()
 api_key = os.getenv("ROBOFLOW_API_KEY")
 if api_key is None:
     raise ValueError("ROBOFLOW_API_KEY not found in .env file")
 
-def get_prediction(model: str | inference.Model, image: str | np.ndarray) -> sv.Detections:
+def get_prediction(model: str | Any, image: str | np.ndarray) -> sv.Detections:
     """
     Get the predictions for an image using a model.
 
     Args:
-        model (str | inference.Model): The model to use. If a string, it is assumed to be the model version.
+        model (str | Any): The model to use. If a string, it is assumed to be the model version.
         image (str | np.ndarray): The image to predict. If a string, it is assumed to be the path to the image. If a numpy array, it is assumed to be the image.
 
     Returns:
