@@ -3,17 +3,27 @@ import supervision as sv
 import cv2
 from dotenv import load_dotenv
 import os
-from typing import Any
+import numpy as np
 
 load_dotenv()
 api_key = os.getenv("ROBOFLOW_API_KEY")
 if api_key is None:
     raise ValueError("ROBOFLOW_API_KEY not found in .env file")
 
-def get_prediction(model: Any, image_path: str) -> sv.Detections:
+def get_prediction(model: str | inference.Model, image: str | np.ndarray) -> sv.Detections:
+    """
+    Get the predictions for an image using a model.
+
+    Args:
+        model (str | inference.Model): The model to use. If a string, it is assumed to be the model version.
+        image (str | np.ndarray): The image to predict. If a string, it is assumed to be the path to the image. If a numpy array, it is assumed to be the image.
+
+    Returns:
+    """
     if isinstance(model, str):
         model = inference.get_model(f"elephant-identification-research/{model}", api_key=api_key)
-    image = cv2.imread(image_path)
+    if isinstance(image, str):
+        image = cv2.imread(image)
     results = model.infer(image)[0]
     detections = sv.Detections.from_inference(results)
     return detections
