@@ -6,11 +6,6 @@ import os
 import numpy as np
 from typing import Any
 
-load_dotenv()
-api_key = os.getenv("ROBOFLOW_API_KEY")
-if api_key is None:
-    raise ValueError("ROBOFLOW_API_KEY not found in .env file")
-
 def get_prediction(model: str | Any, image: str | np.ndarray) -> sv.Detections:
     """
     Get the predictions for an image using a model.
@@ -30,6 +25,11 @@ def get_prediction(model: str | Any, image: str | np.ndarray) -> sv.Detections:
     return detections
 
 if __name__ == "__main__":
+    load_dotenv()
+    api_key = os.getenv("ROBOFLOW_API_KEY")
+    if api_key is None:
+        raise ValueError("ROBOFLOW_API_KEY not found in .env file")
+
     model_id = "20"
     image_path = "images/all_elephant_images/ahmed/ahmed_8.jpg"
     print(get_prediction(model_id, image_path))
