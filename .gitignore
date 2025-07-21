@@ -9,3 +9,5 @@ images/
 __pycache__/
 
 train_cache/
+
+processing/
