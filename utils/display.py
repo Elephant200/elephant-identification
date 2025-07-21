@@ -29,3 +29,9 @@ def print_with_padding(*values: str, char: str = "=", sep: str = " ") -> None:
         sep (str): The separator between the strings. Defaults to " ".
     """
     print(pad_with_char(*values, char=char, sep=sep)) 
+
+def clear() -> None:
+    """
+    Clear the console.
+    """
+    os.system("cls" if os.name == "nt" else "clear")
