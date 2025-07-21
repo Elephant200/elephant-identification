@@ -44,7 +44,7 @@ if __name__ == "__main__":
 
     print("Saving features...")
     query.save("train_cache/query.pkl")
-    database.save("train_cache/database.pkl")
+    database.save("database.pkl")
   
   print("Calculating similarity...")
   similarity_function = CosineSimilarity()
