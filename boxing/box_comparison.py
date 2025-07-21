@@ -10,6 +10,7 @@ import supervision as sv
 from tqdm import tqdm
 
 from boxing.get_prediction import get_prediction
+from dataset_creation.process import classify_image
 from utils import (
     get_files_from_dir,
     get_int,
@@ -41,17 +42,17 @@ else:
     model_versions = get_list_of_ints("Please enter the model versions below.\n")
 
 model_to_color = {
-    "5": sv.Color(255, 0, 0),
-    "7": sv.Color(255, 255, 0),
-    "12": sv.Color(0, 255, 0),
-    "13": sv.Color(0, 255, 255),
-    "14": sv.Color(0, 0, 255),
-    "15": sv.Color(255, 0, 255),
-    "16": sv.Color(0, 0, 0),
-    "17": sv.Color(255, 255, 255),
-    "18": sv.Color(255, 128, 128),
-    "19": sv.Color(128, 255, 128),
-    "20": sv.Color(128, 128, 255),
+    "5": sv.Color(255, 0, 0), # Red
+    "7": sv.Color(255, 255, 0), # Yellow
+    "12": sv.Color(0, 255, 0), # Green
+    "13": sv.Color(0, 255, 255), # Cyan
+    "14": sv.Color(0, 0, 255), # Blue
+    "15": sv.Color(255, 0, 255), # Magenta
+    "16": sv.Color(0, 0, 0), # Black
+    "17": sv.Color(255, 255, 255), # White
+    "18": sv.Color(255, 128, 128), # Reddish-Pink
+    "19": sv.Color(128, 255, 128), # Light Green
+    "20": sv.Color(128, 128, 255), # Lavender
 }
 
 def load_models(model_versions: list[str | int]) -> tuple[list, list[sv.Color], list[tuple[sv.BoxAnnotator, sv.LabelAnnotator]]]:
@@ -200,6 +201,7 @@ while True:
 
         for model, (box_annotator, label_annotator), version in zip(models, annotators, model_versions):
             detections = get_prediction(model, image_path)
+            classification = classify_image(detections)
             detection = [d for d in detections]
             print(detections.xyxy)
             print(detections.class_id)
@@ -232,6 +234,6 @@ while True:
             cv2.rectangle(overlay, (legend_x + 10, y_pos - 10), (legend_x + 30, y_pos + 10), (color.b, color.g, color.r), -1)
             cv2.putText(overlay, f"v{version}", (legend_x + 40, y_pos + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
 
-        cv2.imshow(f"Model Comparison (Image: {image_path.split('/')[-1]}) [{i+1}/{len(image_paths)}]", overlay)
+        cv2.imshow(f"Model Comparison (Classification: {classification}) (Image: {image_path.split('/')[-1]}) [{i+1}/{len(image_paths)}]", overlay)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
