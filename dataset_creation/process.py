@@ -12,31 +12,10 @@ from tqdm import tqdm
 from typing import Literal
 
 from boxing.get_prediction import get_prediction
-from utils import print_with_padding, is_image, clear
+from utils import print_with_padding, is_image, clear, get_all_images
 
 project_id = "elephant-identification-research"
 model_versions = ["20"]
-
-def get_all_images(dir: str, look_at_subdirs: bool = True) -> list[str]:
-  """
-  Gets all images in a directory and its subdirectories.
-
-  Args:
-    dir (str): The directory to get images from.
-    look_at_subdirs (bool): Whether to look at subdirectories.
-
-  Returns:
-    list[str]: A list of image paths. Includes the directory path.
-  """
-  files = []
-  for file in os.listdir(dir):
-    if not os.path.isdir(os.path.join(dir, file)) and is_image(os.path.join(dir, file)):
-      files.append(os.path.join(dir, file))
-  if look_at_subdirs:
-    for subdir in os.listdir(dir):
-      if os.path.isdir(os.path.join(dir, subdir)):
-        files.extend(get_all_images(os.path.join(dir, subdir), True))
-  return files
 
 def classify_image(detections: sv.Detections) -> Literal["Certain", "Probable", "Uncertain", "Likely Bad", "Rejected"]:
   """
