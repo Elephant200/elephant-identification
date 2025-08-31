@@ -1,5 +1,6 @@
 # Ignore image directories
 images/
+dataset/
 
 .DS_Store
 
