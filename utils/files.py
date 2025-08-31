@@ -103,3 +103,24 @@ def is_image(file_path: str) -> bool:
         bool: True if the file is an image, False otherwise.
     """
     return file_path.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff')) 
+
+def get_all_images(dir: str, look_at_subdirs: bool = True) -> list[str]:
+  """
+  Gets all images in a directory and its subdirectories.
+
+  Args:
+    dir (str): The directory to get images from.
+    look_at_subdirs (bool): Whether to look at subdirectories.
+
+  Returns:
+    list[str]: A list of image paths. Includes the directory path.
+  """
+  files = []
+  for file in os.listdir(dir):
+    if not os.path.isdir(os.path.join(dir, file)) and is_image(os.path.join(dir, file)):
+      files.append(os.path.join(dir, file))
+  if look_at_subdirs:
+    for subdir in os.listdir(dir):
+      if os.path.isdir(os.path.join(dir, subdir)):
+        files.extend(get_all_images(os.path.join(dir, subdir), True))
+  return files

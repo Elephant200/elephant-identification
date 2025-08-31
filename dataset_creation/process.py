@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import shutil
 import time
 
@@ -106,13 +107,14 @@ def process_and_copy_image(
     classification: str,
     unannotated_dirs: dict,
     annotated_dirs: dict,
+    cropped_dirs: dict,
     trackers: dict,
     box_annotator: sv.BoxAnnotator,
     label_annotator: sv.LabelAnnotator,
     replace_existing: bool = False,
 ) -> None:
   """
-  Process and copy an image to both unannotated and annotated directories.
+  Process and copy an image to both unannotated, annotated, and cropped directories.
   
   Args:
     image_path (str): Path to the source image
@@ -120,6 +122,7 @@ def process_and_copy_image(
     classification (str): Classification category (Certain, Probable, etc.)
     unannotated_dirs (dict): Dictionary mapping classifications to unannotated directories
     annotated_dirs (dict): Dictionary mapping classifications to annotated directories
+    cropped_dirs (dict): Dictionary mapping classifications to cropped directories
     trackers (dict): Dictionary tracking counts for each category
     box_annotator (sv.BoxAnnotator): Box annotator
     label_annotator (sv.LabelAnnotator): Label annotator
@@ -145,6 +148,16 @@ def process_and_copy_image(
       area = detections.box_area[i]
       labels.append(f"{round(100 * confidence)}% | {round(area / 1000, 1)}kpx")
     
+    if len(detections.xyxy) > 0:
+      cropped_image = image[int(detections.xyxy[0][1]):int(detections.xyxy[0][3]), int(detections.xyxy[0][0]):int(detections.xyxy[0][2])]
+    else:
+      cropped_image = image
+    
+    cropped_path = os.path.join(cropped_dirs[classification], image_name)
+    if replace_existing and os.path.exists(cropped_path):
+      os.remove(cropped_path)
+    cv2.imwrite(cropped_path, cropped_image)
+
     annotated_image = box_annotator.annotate(image.copy(), detections=detections)
     annotated_image = label_annotator.annotate(annotated_image, detections=detections, labels=labels)
     
@@ -155,7 +168,8 @@ def process_and_copy_image(
     
     trackers[classification] += 1
   except Exception as e:
-    print("Error annotating image: ", e)
+    trackers["Error"] += 1
+    print(f"Error annotating image {image_name}: ", e)
 
 
 if __name__ == "__main__":
@@ -164,10 +178,12 @@ if __name__ == "__main__":
     raise ValueError("ROBOFLOW_API_KEY not found in .env file")
 
   IMAGE_DIR = "/Users/kayoko/Documents/GitHub/elephant-identification/images"
-  TYPE = "ELPephants"
+  TYPE = "sheldrick" if len(sys.argv) < 2 else sys.argv[1]
   if TYPE == "sheldrick":
+    print("Using sheldrick images")
     INPUT_DIR = f"{IMAGE_DIR}/all_elephant_images"
   elif TYPE == "ELPephants":
+    print("Using ELPephants images")
     INPUT_DIR = f"{IMAGE_DIR}/ELPephants"
 
   # Unannotated directories
@@ -188,7 +204,16 @@ if __name__ == "__main__":
     "Rejected": f"processing/{TYPE}/annotated/rejected",
   }
 
-  all_dirs = [*UNANNOTATED_DIRS.values(), *ANNOTATED_DIRS.values()]
+  # Cropped directories
+  CROPPED_DIRS = {
+    "Certain": f"processing/{TYPE}/cropped/certain",
+    "Probable": f"processing/{TYPE}/cropped/probable",
+    "Uncertain": f"processing/{TYPE}/cropped/uncertain",
+    "Likely Bad": f"processing/{TYPE}/cropped/likely_bad",
+    "Rejected": f"processing/{TYPE}/cropped/rejected",
+  }
+
+  all_dirs = [*UNANNOTATED_DIRS.values(), *ANNOTATED_DIRS.values(), *CROPPED_DIRS.values()]
   for dir in all_dirs:
     if not os.path.exists(dir):
       os.makedirs(dir)
@@ -208,10 +233,12 @@ if __name__ == "__main__":
       "Likely Bad": 0,
       "Rejected": 0,
       "Already Processed": 0,
+      "Error": 0,
     }
 
     print("Unannotated Dirs: ", *UNANNOTATED_DIRS.values())
     print("Annotated Dirs: ", *ANNOTATED_DIRS.values())
+    print("Cropped Dirs: ", *CROPPED_DIRS.values())
 
     images = get_all_images(INPUT_DIR)
 
@@ -232,6 +259,7 @@ if __name__ == "__main__":
           classification=classification,
           unannotated_dirs=UNANNOTATED_DIRS,
           annotated_dirs=ANNOTATED_DIRS,
+          cropped_dirs=CROPPED_DIRS,
           trackers=trackers,
           box_annotator=box_annotator,
           label_annotator=label_annotator,
@@ -239,10 +267,11 @@ if __name__ == "__main__":
       )
 
       if i % 100 == 0:
-        clear()
+        #clear()
         tqdm.write(f"Model v{model_version} - {json.dumps(trackers, indent=2)}")
 
-    clear()
+    
+    #clear()
     print_with_padding("FINAL RESULTS")
     print(f"Model v{model_version} - {json.dumps(trackers, indent=2)}")
     print(f"Time taken: {round(time.time() - start_time, 2)} seconds")
