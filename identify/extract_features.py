@@ -482,8 +482,9 @@ def evaluate_on_set(
     feature_extractor: keras.Model, 
     class_mapping: Dict[str, int],
     batch_size: Optional[int] = None,
-    pool_size: int = 2
-) -> float:
+    pool_size: int = 2,
+    top_k_values: List[int] = [1, 3, 5]
+) -> Dict[str, float]:
     """Evaluate trained model accuracy on a dataset using optimized batch processing.
     
     Args:
@@ -496,9 +497,11 @@ def evaluate_on_set(
         batch_size (Optional[int]): Batch size for feature extraction. If None, uses optimal size
         pool_size (int): Size of the max pooling layer used in feature extraction.
                         Defaults to 2. Must match the pool size used during training
+        top_k_values (List[int]): List of k values for top-k accuracy calculation.
+                                 Defaults to [1, 3, 5]
         
     Returns:
-        float: Accuracy score between 0.0 and 1.0
+        Dict[str, float]: Dictionary mapping 'top_k' to accuracy scores
         
     Raises:
         ValueError: If dataset is empty or missing required columns
@@ -536,29 +539,41 @@ def evaluate_on_set(
         pca_time = time.time() - start_time
         logger.info(f"PCA completed in {pca_time:.2f}s")
         
-        # Predict all samples at once
+        # Get prediction probabilities for all classes
         start_time = time.time()
-        predicted_ids = svm.predict(features_pca)
+        prediction_probs = svm.predict_proba(features_pca)
         prediction_time = time.time() - start_time
         logger.info(f"SVM prediction completed in {prediction_time:.2f}s")
         
-        # Convert predicted IDs back to names
-        reverse_class_mapping = {v: k for k, v in class_mapping.items()}
-        predicted_names = [reverse_class_mapping.get(pred_id, "UNKNOWN") for pred_id in predicted_ids]
-        
-        # Compare predictions with true labels
+        # Convert true names to IDs for comparison
         true_names = [str(name) for name in extracted_names]
-        correct = sum(1 for true_name, pred_name in zip(true_names, predicted_names) 
-                     if true_name == pred_name)
+        true_ids = [class_mapping.get(name, -1) for name in true_names]
         
-        # Calculate accuracy
-        total = len(true_names)
-        accuracy = correct / total if total > 0 else 0.0
+        # Get top-k predictions for each sample
+        # Sort probabilities in descending order and get indices
+        top_k_predictions = np.argsort(prediction_probs, axis=1)[:, ::-1]
+        
+        # Calculate top-k accuracies
+        accuracies = {}
+        total = len(true_ids)
+        
+        for k in top_k_values:
+            # Ensure k doesn't exceed number of classes
+            k_actual = min(k, prediction_probs.shape[1])
+            
+            # Check if true ID is in top k predictions
+            correct = 0
+            for i, true_id in enumerate(true_ids):
+                if true_id != -1 and true_id in top_k_predictions[i, :k_actual]:
+                    correct += 1
+            
+            accuracy = correct / total if total > 0 else 0.0
+            accuracies[f'top_{k}'] = accuracy
+            logger.info(f"Top-{k} Accuracy: {accuracy:.3f} ({correct}/{total})")
         
         # Log detailed results
         total_time = feature_extraction_time + pca_time + prediction_time
         logger.debug(f"Batch evaluation completed in {total_time:.2f}s")
-        logger.info(f"Accuracy: {accuracy:.3f} ({correct}/{total})")
         
         # Clean up temporary cache
         temp_cache_dir = 'temp_eval_cache'
@@ -566,14 +581,14 @@ def evaluate_on_set(
             shutil.rmtree(temp_cache_dir)
             logger.debug("Cleaned up temporary evaluation cache")
         
-        return accuracy
+        return accuracies
         
     except Exception as e:
         logger.error(f"Batch evaluation failed: {e}")
         logger.info("Falling back to single-image evaluation...")
         
         # Fallback to single-image evaluation if batch fails
-        return _evaluate_single_images(dataset, svm, pca, scaler, feature_extractor, class_mapping)
+        return _evaluate_single_images(dataset, svm, pca, scaler, feature_extractor, class_mapping, top_k_values)
 
 
 def _evaluate_single_images(
@@ -582,9 +597,10 @@ def _evaluate_single_images(
     pca: PCA,
     scaler: StandardScaler,
     feature_extractor: keras.Model,
-    class_mapping: Dict[str, int]
-) -> float:
-    """Fallback single-image evaluation method.
+    class_mapping: Dict[str, int],
+    top_k_values: List[int] = [1, 3, 5]
+) -> Dict[str, float]:
+    """Fallback single-image evaluation method with top-k accuracy support.
     
     Args:
         dataset (pd.DataFrame): Dataset to evaluate
@@ -593,23 +609,50 @@ def _evaluate_single_images(
         scaler (StandardScaler): Fitted feature scaler
         feature_extractor (keras.Model): Pre-trained feature extraction model
         class_mapping (Dict[str, int]): Mapping from elephant names to class indices
+        top_k_values (List[int]): List of k values for top-k accuracy calculation
         
     Returns:
-        float: Accuracy score between 0.0 and 1.0
+        Dict[str, float]: Dictionary mapping 'top_k' to accuracy scores
     """
-    correct = 0
     total = len(dataset)
     errors = 0
-
+    
+    # Initialize counters for each k value
+    correct_counts = {k: 0 for k in top_k_values}
+    
     logger.info(f"Fallback evaluation on {total} images (single-image processing)...")
     
     for idx, row in dataset.iterrows():
         try:
-            predicted_name, _ = predict_single_image(
-                row['filepath'], svm, pca, scaler, feature_extractor, class_mapping
-            )
-            if predicted_name == str(row['name']):
-                correct += 1
+            # Extract features for single image
+            with tf.device('/GPU:0' if tf.config.list_physical_devices('GPU') else '/CPU:0'):
+                image = load_image(row['filepath'])
+                feature_map = feature_extractor(image)
+            
+            # Convert to numpy and flatten
+            raw_features = feature_map.numpy().flatten()
+            
+            # Apply preprocessing pipeline
+            features_scaled = scaler.transform([raw_features])
+            features_pca = pca.transform(features_scaled)
+            
+            # Get prediction probabilities
+            probs = svm.predict_proba(features_pca)[0]
+            
+            # Get top-k predictions
+            top_k_indices = np.argsort(probs)[::-1]
+            
+            # Get true ID
+            true_name = str(row['name'])
+            true_id = class_mapping.get(true_name, -1)
+            
+            if true_id != -1:
+                # Check for each k value
+                for k in top_k_values:
+                    k_actual = min(k, len(top_k_indices))
+                    if true_id in top_k_indices[:k_actual]:
+                        correct_counts[k] += 1
+                        
         except Exception as e:
             errors += 1
             logger.warning(f"Evaluation error for image {row['filepath']}: {e}")
@@ -621,9 +664,14 @@ def _evaluate_single_images(
     if errors > 0:
         logger.warning(f"Encountered {errors} errors during evaluation")
     
-    accuracy = correct / total if total > 0 else 0.0
-    logger.info(f"Single-image evaluation complete - Accuracy: {accuracy:.3f} ({correct}/{total})")
-    return accuracy
+    # Calculate accuracies
+    accuracies = {}
+    for k in top_k_values:
+        accuracy = correct_counts[k] / total if total > 0 else 0.0
+        accuracies[f'top_{k}'] = accuracy
+        logger.info(f"Single-image evaluation - Top-{k} Accuracy: {accuracy:.3f} ({correct_counts[k]}/{total})")
+    
+    return accuracies
 
 
 def create_optimized_feature_extractor(
@@ -730,6 +778,13 @@ if __name__ == "__main__":
         default=2, 
         help='Size of the max pooling layer (default: 2)'
     )
+    parser.add_argument(
+        '--top-k', 
+        type=int, 
+        nargs='+',
+        default=[1, 3, 5, 10], 
+        help='List of k values for top-k accuracy evaluation (default: 1 3 5 10)'
+    )
     args = parser.parse_args()
 
     logger.info("Starting elephant identification pipeline...")
@@ -809,10 +864,16 @@ if __name__ == "__main__":
 
         # Evaluate on test set with batch optimization
         logger.info("Starting test set evaluation...")
-        evaluate_on_set(
+        accuracies = evaluate_on_set(
             test_data, svm, pca, scaler, feature_extractor, class_mapping,
-            batch_size=args.batch_size, pool_size=args.pool_size
+            batch_size=args.batch_size, pool_size=args.pool_size, top_k_values=args.top_k
         )
+        
+        # Display results summary
+        logger.info("=== Evaluation Results Summary ===")
+        for k_name, accuracy in accuracies.items():
+            logger.info(f"{k_name}: {accuracy:.3f}")
+        logger.info("==================================")
         
         
     except Exception as e:
