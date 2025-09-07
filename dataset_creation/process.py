@@ -157,13 +157,13 @@ if __name__ == "__main__":
     raise ValueError("ROBOFLOW_API_KEY not found in .env file")
 
   IMAGE_DIR = "/Users/kayoko/Documents/GitHub/elephant-identification/images"
-  TYPE = "sheldrick" if len(sys.argv) < 2 else sys.argv[1]
+  TYPE = "ELPephants" if len(sys.argv) < 2 else sys.argv[1]
   if TYPE == "sheldrick":
     print("Using sheldrick images")
     INPUT_DIR = f"{IMAGE_DIR}/all_elephant_images"
   elif TYPE == "ELPephants":
-    print("Using ELPephants images")
-    INPUT_DIR = f"{IMAGE_DIR}/ELPephants"
+    print("Using augmented ELPephants images")
+    INPUT_DIR = f"{IMAGE_DIR}/ELPephants-reflected"
 
   # Unannotated directories
   UNANNOTATED_DIRS = {
