@@ -6,6 +6,8 @@ scikit-learn
 numpy
 matplotlib
 seaborn
+tensorflow
+tensorflow-metal
 keras
 python-dotenv
 opencv-python
