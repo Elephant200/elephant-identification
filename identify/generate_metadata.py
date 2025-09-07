@@ -112,16 +112,26 @@ with open(f"{root_dir}/dataset/class_mapping.json", "w") as f:
     json.dump(class_mapping, f)
 
 try:
-    # Split the dataset: 8 train, 2 test per elephant
+    # Split the dataset: 80% train, 20% test
+    print(f"About to split dataset with {len(data)} samples from {data['name'].nunique()} elephants")
     train_data, test_data = split_dataset_by_elephant(
-        data, 
+        data,
         ratio=0.8,
         random_seed=42
     )
 
+    print(f"Writing train.csv to: {root_dir}/dataset/train.csv")
+    print(f"Train data first few names: {train_data['name'].head().tolist()}")
+    print(f"Train data unique names: {sorted(train_data['name'].unique())[:5]}")
     train_data.to_csv(f"{root_dir}/dataset/train.csv", index=False)
     test_data.to_csv(f"{root_dir}/dataset/test.csv", index=False)
-    
+
+    # Verify the file was written correctly
+    print("Verifying written file...")
+    written_df = pd.read_csv(f"{root_dir}/dataset/train.csv")
+    print(f"Written file first few names: {written_df['name'].head().tolist()}")
+    print(f"Written file unique names: {sorted(written_df['name'].unique())[:5]}")
+
     print(f"Split completed successfully!")
     print(f"Training set: {len(train_data)} images from {train_data['name'].nunique()} elephants")
     print(f"Testing set:  {len(test_data)} images from {test_data['name'].nunique()} elephants")
