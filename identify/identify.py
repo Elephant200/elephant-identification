@@ -5,7 +5,7 @@ import os
 import pickle
 import shutil
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 import keras
 import numpy as np
@@ -18,11 +18,12 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from tqdm import tqdm
 
+from utils import print_with_padding
+
 # Configure logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Only add handler if it doesn't already exist
 if not logger.handlers:
     console_handler = logging.StreamHandler()
     formatter = logging.Formatter('%(levelname)s: %(message)s')
@@ -30,14 +31,15 @@ if not logger.handlers:
     logger.addHandler(console_handler)
 
 
-def configure_apple_silicon_gpu() -> None:
-    """Configure TensorFlow for optimal Apple Silicon GPU usage.
+def configure_tensorflow(device: Literal['CPU', 'CUDA', 'MPS']) -> None:
+    """Configure TensorFlow for optimal usage.
+
+    Devices:
+        - CPU: CPU backend
+        - CUDA: CUDA backend
+        - MPS: Metal Performance Shaders backend
     
-    Sets up Metal Performance Shaders (MPS) backend for Apple Silicon GPUs,
-    configures memory growth, and optimizes TensorFlow settings for M1/M2 chips.
-    
-    Raises:
-        RuntimeError: If Apple Silicon GPU configuration fails
+    Sets up the backend, configures memory growth, and optimizes TensorFlow settings.
     """
     try:
         # Check if MPS is available (Apple Silicon GPU)
@@ -55,9 +57,8 @@ def configure_apple_silicon_gpu() -> None:
                     logger.warning(f"GPU memory growth configuration failed: {e}")
             
             # Set up mixed precision for better performance
-            policy = tf.keras.mixed_precision.Policy('mixed_float16')
-            tf.keras.mixed_precision.set_global_policy(policy)
-            
+            policy = keras.mixed_precision.Policy('mixed_float16')
+            keras.mixed_precision.set_global_policy(policy)
         else:
             logger.info("No Apple Silicon GPU detected, using CPU")
             # Optimize CPU performance
@@ -98,17 +99,14 @@ def load_image(image_path: str) -> tf.Tensor:
         ValueError: If the image cannot be loaded or processed
     """
     try:
-        # Use tf.io for better GPU integration
         image_raw = tf.io.read_file(image_path)
         image = tf.image.decode_image(image_raw, channels=3)
         
-        # Resize using tf.image for GPU acceleration
         image = tf.image.resize(image, [224, 224])
         image = tf.cast(image, tf.float32)
         
-        # Add batch dimension and apply ResNet preprocessing
         image = tf.expand_dims(image, 0)
-        image = tf.keras.applications.resnet.preprocess_input(image)
+        image = keras.applications.resnet.preprocess_input(image)
         
         return image
         
@@ -126,14 +124,14 @@ def extract_raw_features(
     force_retrain: bool = False,
     batch_size: Optional[int] = None,
     pool_size: int = 2
-) -> Tuple[List[np.ndarray], List[str]]:
-    """Extract and cache raw features from images with GPU-optimized batch processing.
+) -> List[np.ndarray]:
+    """Extract and cache raw features from images
     
     Args:
         data_df (pd.DataFrame): DataFrame containing image paths and labels with columns 
                                ['filepath', 'name']
         feature_extractor (keras.Model): Pre-trained model for feature extraction
-        layer_name (str): Name of the layer to extract features from. 
+        layer_name (str): Name of the layer to extract features from. Only used for cache file naming
                          Defaults to 'conv3_block4_2_relu'
         cache_dir (str): Directory to store cached features. Defaults to 'train_cache'
         force_retrain (bool): If True, ignore cached features and recompute. 
@@ -144,22 +142,11 @@ def extract_raw_features(
                         Defaults to 2. Used for cache file naming
     
     Returns:
-        Tuple[List[np.ndarray], List[str]]: Tuple containing:
-            - List of flattened feature arrays for each image
-            - List of corresponding labels/names
-            
-    Raises:
-        OSError: If cache directory cannot be created or accessed
-        ValueError: If input DataFrame is empty or missing required columns
+        List[np.ndarray]: List of flattened feature arrays for each image
     """
     # Validate inputs
     if data_df.empty:
         raise ValueError("Input DataFrame is empty")
-    
-    required_columns = ['filepath', 'name']
-    missing_columns = [col for col in required_columns if col not in data_df.columns]
-    if missing_columns:
-        raise ValueError(f"DataFrame missing required columns: {missing_columns}")
     
     # Ensure cache directory exists
     os.makedirs(cache_dir, exist_ok=True)
@@ -182,22 +169,17 @@ def extract_raw_features(
         batch_size = get_optimal_batch_size()
     
     features: List[np.ndarray] = []
-    labels: List[str] = []
-    
-    start_time = time.time()
-    
+        
     # Process images in batches for better GPU utilization
     for i in tqdm(range(0, len(data_df), batch_size), desc=f"Extracting raw features with batch size {batch_size}: "):
         batch_df = data_df.iloc[i:i + batch_size]
         batch_images = []
-        batch_labels = []
         
         # Load batch of images
         for _, row in batch_df.iterrows():
             try:
                 image = load_image(row['filepath'])
                 batch_images.append(image)
-                batch_labels.append(str(row['name']))
             except Exception as e:
                 logger.warning(f"Failed to load image {row['filepath']}: {e}")
                 continue
@@ -211,27 +193,21 @@ def extract_raw_features(
                 batch_features = feature_extractor(batch_tensor)
             
             # Convert to numpy and flatten each feature map
-            batch_features_np = batch_features.numpy()
-            for j, feature_map in enumerate(batch_features_np):
+            for feature_map in batch_features.numpy():
                 features.append(feature_map.flatten())
-                labels.append(batch_labels[j])
         
-    feature_extraction_time = time.time() - start_time
-    logger.info(f"Feature extraction completed in {feature_extraction_time:.2f}s "
-               f"({len(data_df)/feature_extraction_time:.1f} images/sec)")
-
     logger.debug(f"Saving {len(features)} features to {cache_file}")
     try:
         with open(cache_file, 'wb') as f:
-            pickle.dump((features, labels), f)
+            pickle.dump(features, f)
     except Exception as e:
         logger.error(f"Failed to save features cache: {e}")
         raise OSError(f"Could not save features to {cache_file}: {e}")
         
-    return features, labels
+    return features
 
 
-def apply_pca(
+def train_pca(
     features: List[np.ndarray], 
     n_components: int = 500, 
     cache_dir: str = 'train_cache', 
@@ -239,7 +215,7 @@ def apply_pca(
     force_retrain: bool = False,
     pool_size: int = 2
 ) -> Tuple[np.ndarray, PCA, StandardScaler]:
-    """Apply PCA dimensionality reduction to extracted features.
+    """Train PCA dimensionality reduction to extracted features and return fitted PCA and scaler.
     
     Args:
         features (List[np.ndarray]): List of flattened feature vectors from images
@@ -257,12 +233,8 @@ def apply_pca(
     Returns:
         Tuple[np.ndarray, PCA, StandardScaler]: Tuple containing:
             - Transformed features with reduced dimensionality (n_samples, n_components)
-            - Fitted PCA transformer for future use
-            - Fitted StandardScaler for consistent preprocessing
-            
-    Raises:
-        ValueError: If features list is empty or n_components is invalid
-        OSError: If cache operations fail
+            - Fitted PCA transformer
+            - Fitted StandardScaler
     """
     if not features:
         raise ValueError("Features list is empty")
@@ -286,9 +258,7 @@ def apply_pca(
         logger.info(f"Force retrain: Removing cached PCA features from {cache_file}")
         os.remove(cache_file)
 
-    logger.info(f"Applying PCA dimensionality reduction to {len(features)} features...")
-
-    start_time = time.time()
+    logger.info(f"Training PCA dimensionality reduction to {len(features)} features...")
     
     try:
         # Convert to numpy array for sklearn
@@ -305,22 +275,17 @@ def apply_pca(
         
         pca = PCA(n_components=actual_components)
         X_pca = pca.fit_transform(X_scaled)
-        
-        logger.info(f"PCA completed: {X.shape} -> {X_pca.shape}")
-        
+                
         # Save to cache
         with open(cache_file, 'wb') as f:
             pickle.dump((X_pca, pca, scaler), f)
         logger.debug(f"Saved PCA results to {cache_file}")
-
-        pca_time = time.time() - start_time
-        logger.info(f"PCA completed in {pca_time:.2f}s")
         
         return X_pca, pca, scaler
         
     except Exception as e:
         logger.error(f"PCA computation failed: {e}")
-        raise ValueError(f"Failed to apply PCA: {e}")
+        raise ValueError(f"Failed to train PCA: {e}")
 
 
 def train_svm(
@@ -383,8 +348,6 @@ def train_svm(
 
     logger.info(f"Training SVM classifier on {X_train.shape[0]} samples with {X_train.shape[1]} features...")
 
-    start_time = time.time()
-
     try:
         # Train SVM with linear kernel and probability estimates
         svm = SVC(
@@ -404,10 +367,7 @@ def train_svm(
         with open(cache_file, 'wb') as f:
             pickle.dump(svm, f)
         logger.debug(f"Saved SVM model to {cache_file}")
-        
-        svm_time = time.time() - start_time
-        logger.info(f"SVM training completed in {svm_time:.2f}s")
-        
+                
         return svm
         
     except Exception as e:
@@ -474,6 +434,76 @@ def predict_single_image(
         raise ValueError(f"Failed to predict image {image_path}: {e}")
 
 
+def train_on_set(
+    dataset: pd.DataFrame,
+    layer_name: str,
+    n_components: int,
+    pool_size: int,
+    class_mapping: Dict[str, int],
+    *,
+    force_features: bool = False,
+    force_pca: bool = False,
+    force_svm: bool = False,
+    batch_size: int | None = None,
+):
+    """Train the pipeline on the train dataset"""
+    try:
+        logger.info(f"Training pipeline: ResNet50 until {layer_name} -> Pool({pool_size}) -> PCA({n_components}) -> SVM")
+
+        # Create optimized feature extractor
+        feature_extractor = create_feature_extractor(layer_name, pool_size)
+
+        # Extract raw features with GPU optimization
+        start_time = time.perf_counter()
+        raw_features = extract_raw_features(
+            dataset, 
+            feature_extractor, 
+            layer_name, 
+            force_retrain=force_features,
+            batch_size=batch_size,
+            pool_size=pool_size
+        )
+        feature_extraction_time = time.perf_counter() - start_time
+        logger.info(f"Feature extraction completed in {feature_extraction_time:.2f}s")
+        logger.debug(f"Raw features shape: {np.array(raw_features).shape}")
+
+        # Train PCA
+        start_time = time.perf_counter()
+        X_pca, pca, scaler = train_pca(
+            raw_features, 
+            n_components, 
+            layer_name=layer_name, 
+            force_retrain=force_pca,
+            pool_size=pool_size
+        )
+        pca_time = time.perf_counter() - start_time
+        logger.info(f"PCA training completed in {pca_time:.2f}s")
+        logger.debug(f"PCA features shape: {X_pca.shape}")
+
+        # Convert names to class IDs
+        y_train = [class_mapping[str(name)] for name in dataset['name']]
+        logger.debug(f"Converted {len(y_train)} labels to class IDs")
+
+        # Train SVM
+        start_time = time.perf_counter()
+        svm = train_svm(
+            X_pca, 
+            y_train, 
+            layer_name=layer_name, 
+            n_components=n_components, 
+            force_retrain=force_svm,
+            pool_size=pool_size
+        )
+        svm_time = time.perf_counter() - start_time
+        logger.info(f"SVM training completed in {svm_time:.2f}s")
+
+        return feature_extractor, pca, scaler, svm
+
+    except Exception as e:
+        logger.error(f"Training failed: {e}")
+        raise ValueError(f"Failed to train on set: {e}")
+
+
 def evaluate_on_set(
     dataset: pd.DataFrame, 
     svm: SVC, 
@@ -481,9 +511,9 @@ def evaluate_on_set(
     scaler: StandardScaler, 
     feature_extractor: keras.Model, 
     class_mapping: Dict[str, int],
-    batch_size: Optional[int] = None,
+    batch_size: int | None = None,
     pool_size: int = 2,
-    top_k_values: List[int] = [1, 3, 5]
+    top_k_values: List[int] = [1, 3, 5, 10]
 ) -> Dict[str, float]:
     """Evaluate trained model accuracy on a dataset using optimized batch processing.
     
@@ -515,38 +545,34 @@ def evaluate_on_set(
         raise ValueError(f"Dataset missing required columns: {missing_columns}")
     
     try:
-        # Use optimized batch feature extraction
-        start_time = time.time()
-        
         # Extract features for all images in batches
-        raw_features, extracted_names = extract_raw_features(
+        start_time = time.perf_counter()
+        raw_features = extract_raw_features(
             dataset, 
             feature_extractor, 
-            layer_name='evaluation_temp',  # Use temp cache name
             cache_dir='temp_eval_cache', 
             force_retrain=True,  # Always recompute for evaluation
             batch_size=batch_size,
             pool_size=pool_size  # Use same pool size as training
         )
-        
-        feature_extraction_time = time.time() - start_time
-        # already logged in extract_raw_features
+        feature_extraction_time = time.perf_counter() - start_time
+        logger.info(f"Feature extraction completed in {feature_extraction_time:.2f}s")
         
         # Apply PCA transformation to all features at once
-        start_time = time.time()
+        start_time = time.perf_counter()
         features_scaled = scaler.transform(raw_features)
         features_pca = pca.transform(features_scaled)
-        pca_time = time.time() - start_time
+        pca_time = time.perf_counter() - start_time
         logger.info(f"PCA completed in {pca_time:.2f}s")
         
         # Get prediction probabilities for all classes
-        start_time = time.time()
+        start_time = time.perf_counter()
         prediction_probs = svm.predict_proba(features_pca)
-        prediction_time = time.time() - start_time
+        prediction_time = time.perf_counter() - start_time
         logger.info(f"SVM prediction completed in {prediction_time:.2f}s")
         
         # Convert true names to IDs for comparison
-        true_names = [str(name) for name in extracted_names]
+        true_names = [str(name) for name in dataset['name']]
         true_ids = [class_mapping.get(name, -1) for name in true_names]
         
         # Get top-k predictions for each sample
@@ -573,7 +599,7 @@ def evaluate_on_set(
         
         # Log detailed results
         total_time = feature_extraction_time + pca_time + prediction_time
-        logger.debug(f"Batch evaluation completed in {total_time:.2f}s")
+        logger.debug(f"Evaluation completed in {total_time:.2f}s")
         
         # Clean up temporary cache
         temp_cache_dir = 'temp_eval_cache'
@@ -584,101 +610,14 @@ def evaluate_on_set(
         return accuracies
         
     except Exception as e:
-        logger.error(f"Batch evaluation failed: {e}")
-        logger.info("Falling back to single-image evaluation...")
-        
-        # Fallback to single-image evaluation if batch fails
-        return _evaluate_single_images(dataset, svm, pca, scaler, feature_extractor, class_mapping, top_k_values)
+        logger.error(f"Evaluation failed: {e}")
 
 
-def _evaluate_single_images(
-    dataset: pd.DataFrame,
-    svm: SVC,
-    pca: PCA,
-    scaler: StandardScaler,
-    feature_extractor: keras.Model,
-    class_mapping: Dict[str, int],
-    top_k_values: List[int] = [1, 3, 5]
-) -> Dict[str, float]:
-    """Fallback single-image evaluation method with top-k accuracy support.
-    
-    Args:
-        dataset (pd.DataFrame): Dataset to evaluate
-        svm (SVC): Trained SVM classifier
-        pca (PCA): Fitted PCA transformer
-        scaler (StandardScaler): Fitted feature scaler
-        feature_extractor (keras.Model): Pre-trained feature extraction model
-        class_mapping (Dict[str, int]): Mapping from elephant names to class indices
-        top_k_values (List[int]): List of k values for top-k accuracy calculation
-        
-    Returns:
-        Dict[str, float]: Dictionary mapping 'top_k' to accuracy scores
-    """
-    total = len(dataset)
-    errors = 0
-    
-    # Initialize counters for each k value
-    correct_counts = {k: 0 for k in top_k_values}
-    
-    logger.info(f"Fallback evaluation on {total} images (single-image processing)...")
-    
-    for idx, row in dataset.iterrows():
-        try:
-            # Extract features for single image
-            with tf.device('/GPU:0' if tf.config.list_physical_devices('GPU') else '/CPU:0'):
-                image = load_image(row['filepath'])
-                feature_map = feature_extractor(image)
-            
-            # Convert to numpy and flatten
-            raw_features = feature_map.numpy().flatten()
-            
-            # Apply preprocessing pipeline
-            features_scaled = scaler.transform([raw_features])
-            features_pca = pca.transform(features_scaled)
-            
-            # Get prediction probabilities
-            probs = svm.predict_proba(features_pca)[0]
-            
-            # Get top-k predictions
-            top_k_indices = np.argsort(probs)[::-1]
-            
-            # Get true ID
-            true_name = str(row['name'])
-            true_id = class_mapping.get(true_name, -1)
-            
-            if true_id != -1:
-                # Check for each k value
-                for k in top_k_values:
-                    k_actual = min(k, len(top_k_indices))
-                    if true_id in top_k_indices[:k_actual]:
-                        correct_counts[k] += 1
-                        
-        except Exception as e:
-            errors += 1
-            logger.warning(f"Evaluation error for image {row['filepath']}: {e}")
-        
-        # Progress logging
-        if (idx + 1) % 50 == 0:
-            logger.info(f"Evaluated {idx + 1}/{total} images")
-
-    if errors > 0:
-        logger.warning(f"Encountered {errors} errors during evaluation")
-    
-    # Calculate accuracies
-    accuracies = {}
-    for k in top_k_values:
-        accuracy = correct_counts[k] / total if total > 0 else 0.0
-        accuracies[f'top_{k}'] = accuracy
-        logger.info(f"Single-image evaluation - Top-{k} Accuracy: {accuracy:.3f} ({correct_counts[k]}/{total})")
-    
-    return accuracies
-
-
-def create_optimized_feature_extractor(
+def create_feature_extractor(
     layer_name: str = 'conv3_block4_2_relu',
     pool_size: int = 2
 ) -> keras.Model:
-    """Create an optimized feature extractor for Apple Silicon.
+    """Create a feature extractor.
     
     Args:
         layer_name (str): Name of the ResNet50 layer to extract features from.
@@ -703,23 +642,19 @@ def create_optimized_feature_extractor(
         target_layer = model.get_layer(name=layer_name)
         
         if pool_size > 1:
-            # Add max pooling for dimensionality reduction
-            max_pooling = keras.layers.MaxPooling2D(
+            max_pooling_layer = keras.layers.MaxPooling2D(
                 pool_size=(pool_size, pool_size), 
                 name='feature_pooling'
             )(target_layer.output)
-        
-            # Create feature extractor model
-            feature_extractor = keras.Model(
-                inputs=model.input, 
-                outputs=max_pooling,
-                name='optimized_feature_extractor'
-            )
+
+            last_layer = max_pooling_layer
         else:
-            feature_extractor = keras.Model(
+            last_layer = target_layer.output
+
+        feature_extractor = keras.Model(
                 inputs=model.input, 
-                outputs=target_layer.output,
-                name='optimized_feature_extractor'
+                outputs=last_layer,
+                name='feature_extractor'
             )
         
         logger.debug(f"Created feature extractor from layer: {layer_name}")
@@ -728,14 +663,67 @@ def create_optimized_feature_extractor(
         return feature_extractor
         
     except ValueError as e:
-        available_layers = [layer.name for layer in model.layers]
-        logger.error(f"Layer '{layer_name}' not found. Available layers: {available_layers[:10]}...")
+        logger.error(f"Layer '{layer_name}' not found.")
         raise ValueError(f"Invalid layer name '{layer_name}': {e}")
 
+def run_and_evaluate(
+        force_features: bool, 
+        force_pca: bool, 
+        force_svm: bool, 
+        batch_size: int | None, 
+        layer_name: str, 
+        n_components: int, 
+        pool_size: int,
+        top_k_values: List[int]) -> None:
+    """Run the pipeline and evaluate the model"""
+    configure_tensorflow(device='MPS')
+    
+    # Load training data
+    try:
+        root_dir = "/Users/kayoko/Documents/GitHub/elephant-identification"
+        train_data = pd.read_csv(f"{root_dir}/dataset/train.csv")
+        logger.info(f"Loaded {len(train_data)} training samples")
+
+        # Load class mapping
+        with open('dataset/class_mapping.json', 'r') as f:
+            class_mapping = json.load(f)
+        logger.info(f"Loaded class mapping for {len(class_mapping)} elephants")
+
+        feature_extractor, pca, scaler, svm = train_on_set(
+            dataset=train_data, 
+            layer_name=layer_name, 
+            n_components=n_components, 
+            pool_size=pool_size,
+            class_mapping=class_mapping,
+            force_features=force_features,
+            force_pca=force_pca,
+            force_svm=force_svm,
+            batch_size=batch_size
+        )
+
+        # Load test data and evaluate
+        test_data = pd.read_csv(f"{root_dir}/dataset/test.csv")
+        logger.info(f"Loaded {len(test_data)} test samples")
+
+        # Evaluate on test set with batch optimization
+        logger.info("Starting test set evaluation...")
+        accuracies = evaluate_on_set(
+            test_data, 
+            svm, 
+            pca, 
+            scaler, 
+            feature_extractor, 
+            class_mapping,
+            batch_size=batch_size, 
+            pool_size=pool_size, 
+            top_k_values=top_k_values
+        )
+    except Exception as e:
+        logger.error(f"Pipeline execution failed: {e}")
+        raise
 
 if __name__ == "__main__":
-    # Configure Apple Silicon optimizations
-    configure_apple_silicon_gpu()
+    configure_tensorflow(device='MPS')
     
     parser = argparse.ArgumentParser(
         description='Train and evaluate elephant identification model with Apple Silicon optimizations'
@@ -775,8 +763,8 @@ if __name__ == "__main__":
     parser.add_argument(
         '--pool-size', 
         type=int, 
-        default=2, 
-        help='Size of the max pooling layer (default: 2)'
+        default=6, 
+        help='Size of the max pooling layer (default: 6)'
     )
     parser.add_argument(
         '--top-k', 
@@ -804,83 +792,25 @@ if __name__ == "__main__":
     if args.batch_size:
         logger.info(f"Using batch size: {args.batch_size}")
 
-    try:
-        # Load training data
-        root_dir = "/Users/kayoko/Documents/GitHub/elephant-identification"
-        train_data = pd.read_csv(f"{root_dir}/dataset/train.csv")
-        logger.info(f"Loaded {len(train_data)} training samples")
+    force_features: bool = args.force
+    force_pca: bool = args.force_pca or args.force
+    force_svm: bool = args.force_svm or args.force
 
-        # Load class mapping
-        with open('dataset/class_mapping.json', 'r') as f:
-            class_mapping = json.load(f)
-        logger.info(f"Loaded class mapping for {len(class_mapping)} elephants")
+    layer_name: str = args.layer_name
+    n_components: int = args.n_components
+    pool_size: int = args.pool_size
+    batch_size: int | None = args.batch_size
 
-        layer_name = args.layer_name
-        n_components = args.n_components
-
-        logger.info(f"Training pipeline: ResNet50 until {layer_name} -> Pool({args.pool_size}) -> PCA({n_components}) -> SVM")
-
-        # Create optimized feature extractor
-        feature_extractor = create_optimized_feature_extractor(layer_name, args.pool_size)
-
-        # Extract raw features with GPU optimization
-        raw_features, names = extract_raw_features(
-            train_data, 
-            feature_extractor, 
-            layer_name, 
-            force_retrain=args.force,
-            batch_size=args.batch_size,
-            pool_size=args.pool_size
-        )
-        logger.debug(f"Raw features shape: {np.array(raw_features).shape}")
-
-        # Apply PCA with enhanced error handling
-        X_pca, pca, scaler = apply_pca(
-            raw_features, 
-            n_components, 
-            layer_name=layer_name, 
-            force_retrain=args.force_pca or args.force,
-            pool_size=args.pool_size
-        )
-        logger.debug(f"PCA features shape: {X_pca.shape}")
-
-        # Convert names to class IDs
-        y_train = [class_mapping[name] for name in names]
-        logger.debug(f"Converted {len(y_train)} labels to class IDs")
-
-        # Train SVM with enhanced configuration
-        svm = train_svm(
-            X_pca, 
-            y_train, 
-            layer_name=layer_name, 
-            n_components=n_components, 
-            force_retrain=args.force_svm or args.force,
-            pool_size=args.pool_size
-        )
-
-        # Load test data and evaluate
-        test_data = pd.read_csv(f"{root_dir}/dataset/test.csv")
-        logger.info(f"Loaded {len(test_data)} test samples")
-
-        # Evaluate on test set with batch optimization
-        logger.info("Starting test set evaluation...")
-        accuracies = evaluate_on_set(
-            test_data, svm, pca, scaler, feature_extractor, class_mapping,
-            batch_size=args.batch_size, pool_size=args.pool_size, top_k_values=args.top_k
-        )
-        
-        # Display results summary
-        logger.info("=== Evaluation Results Summary ===")
-        for k_name, accuracy in accuracies.items():
-            logger.info(f"{k_name}: {accuracy:.3f}")
-        logger.info("==================================")
-        
-        
-    except Exception as e:
-        logger.error(f"Pipeline execution failed: {e}")
-        raise
-
-
+    run_and_evaluate(
+        force_features=force_features, 
+        force_pca=force_pca, 
+        force_svm=force_svm, 
+        batch_size=batch_size, 
+        layer_name=layer_name, 
+        n_components=n_components, 
+        pool_size=pool_size,
+        top_k_values=args.top_k
+    )
 
 # Performance notes:
 # - Baseline accuracy: 0.268 with non-reflected images
