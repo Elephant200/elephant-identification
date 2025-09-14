@@ -119,12 +119,12 @@ def load_image(image_path: str) -> tf.Tensor:
 def extract_raw_features(
     data_df: pd.DataFrame, 
     feature_extractor: keras.Model, 
-    layer_name: str = 'conv3_block4_2_relu', 
+    layer_name: str, 
     cache_dir: str = 'train_cache', 
     force_retrain: bool = False,
-    batch_size: Optional[int] = None,
+    batch_size: int | None = None,
     pool_size: int = 2
-) -> List[np.ndarray]:
+) -> list[np.ndarray]:
     """Extract and cache raw features from images
     
     Args:
@@ -136,13 +136,13 @@ def extract_raw_features(
         cache_dir (str): Directory to store cached features. Defaults to 'train_cache'
         force_retrain (bool): If True, ignore cached features and recompute. 
                              Defaults to False
-        batch_size (Optional[int]): Batch size for processing. If None, uses optimal size
+        batch_size (int | None): Batch size for processing. If None, uses optimal size
                                    based on hardware detection
-        pool_size (int): Size of the max pooling layer used in feature extraction.
-                        Defaults to 2. Used for cache file naming
+        pool_size (int): Size of the max pooling layer used in feature extraction. Only used for cache file naming.
+                        Defaults to 2.
     
     Returns:
-        List[np.ndarray]: List of flattened feature arrays for each image
+        list[np.ndarray]: List of flattened feature arrays for each image
     """
     # Validate inputs
     if data_df.empty:
@@ -511,10 +511,11 @@ def evaluate_on_set(
     scaler: StandardScaler, 
     feature_extractor: keras.Model, 
     class_mapping: Dict[str, int],
+    layer_name: str,
     batch_size: int | None = None,
     pool_size: int = 2,
     top_k_values: List[int] = [1, 3, 5, 10]
-) -> Dict[str, float]:
+) -> dict[str, dict[str, float]]:
     """Evaluate trained model accuracy on a dataset using optimized batch processing.
     
     Args:
@@ -524,6 +525,7 @@ def evaluate_on_set(
         scaler (StandardScaler): Fitted feature scaler
         feature_extractor (keras.Model): Pre-trained feature extraction model
         class_mapping (Dict[str, int]): Mapping from elephant names to class indices
+        layer_name (str): Name of the layer to extract features from.
         batch_size (Optional[int]): Batch size for feature extraction. If None, uses optimal size
         pool_size (int): Size of the max pooling layer used in feature extraction.
                         Defaults to 2. Must match the pool size used during training
@@ -531,7 +533,7 @@ def evaluate_on_set(
                                  Defaults to [1, 3, 5]
         
     Returns:
-        Dict[str, float]: Dictionary mapping 'top_k' to accuracy scores
+        dict[str, dict[str, float]]: Dictionary mapping 'top_k' to accuracy percentage, number of correct predictions, and number of total predictions
         
     Raises:
         ValueError: If dataset is empty or missing required columns
@@ -550,10 +552,11 @@ def evaluate_on_set(
         raw_features = extract_raw_features(
             dataset, 
             feature_extractor, 
-            cache_dir='temp_eval_cache', 
-            force_retrain=True,  # Always recompute for evaluation
+            layer_name=layer_name,
+            cache_dir='test_cache', 
+            force_retrain=True,
             batch_size=batch_size,
-            pool_size=pool_size  # Use same pool size as training
+            pool_size=pool_size
         )
         feature_extraction_time = time.perf_counter() - start_time
         logger.info(f"Feature extraction completed in {feature_extraction_time:.2f}s")
@@ -594,8 +597,7 @@ def evaluate_on_set(
                     correct += 1
             
             accuracy = correct / total if total > 0 else 0.0
-            accuracies[f'top_{k}'] = accuracy
-            logger.info(f"Top-{k} Accuracy: {accuracy:.3f} ({correct}/{total})")
+            accuracies[f'top_{k}'] = { "accuracy": accuracy, "correct": correct, "total": total }
         
         # Log detailed results
         total_time = feature_extraction_time + pca_time + prediction_time
@@ -614,15 +616,14 @@ def evaluate_on_set(
 
 
 def create_feature_extractor(
-    layer_name: str = 'conv3_block4_2_relu',
-    pool_size: int = 2
+    layer_name: str,
+    pool_size: int = 6
 ) -> keras.Model:
     """Create a feature extractor.
     
     Args:
         layer_name (str): Name of the ResNet50 layer to extract features from.
-                         Defaults to 'conv3_block4_2_relu'
-        pool_size (int): Size of the max pooling layer. Defaults to 2
+        pool_size (int): Size of the max pooling layer. Defaults to 6
                          
     Returns:
         keras.Model: Optimized feature extraction model
@@ -708,16 +709,20 @@ def run_and_evaluate(
         # Evaluate on test set with batch optimization
         logger.info("Starting test set evaluation...")
         accuracies = evaluate_on_set(
-            test_data, 
-            svm, 
-            pca, 
-            scaler, 
-            feature_extractor, 
-            class_mapping,
+            dataset=test_data, 
+            svm=svm, 
+            pca=pca, 
+            scaler=scaler, 
+            feature_extractor=feature_extractor, 
+            class_mapping=class_mapping,
             batch_size=batch_size, 
+            layer_name=layer_name,
             pool_size=pool_size, 
             top_k_values=top_k_values
         )
+        for k, v in accuracies.items():
+            logger.info(f"{k}: Accuracy: {v['accuracy']:.3f} ({v['correct']}/{v['total']})")
+
     except Exception as e:
         logger.error(f"Pipeline execution failed: {e}")
         raise
