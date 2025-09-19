@@ -2,8 +2,14 @@ from identify.identify import run_and_evaluate
 from utils import print_with_padding
 
 if __name__ == "__main__":
-    all_layer_names = ["conv3_block4_2_relu", "conv4_block6_2_relu", "conv5_block3_2_relu"]
-    all_pool_sizes = [6]
+    all_layer_names = [
+        #"conv3_block4_2_relu",
+        #"conv4_block6_2_relu",
+        "conv4_block6_out", # 40th activation layer
+        #"conv5_block1_out", # 43rd activation layer
+        #"conv5_block3_2_relu"
+    ]
+    all_pool_sizes = [2, 4, 5, 6, 8]
     all_n_components = [1781]
     for layer_name in all_layer_names:
         for pool_size in all_pool_sizes:

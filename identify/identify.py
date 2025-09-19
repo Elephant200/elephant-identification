@@ -514,7 +514,8 @@ def evaluate_on_set(
     layer_name: str,
     batch_size: int | None = None,
     pool_size: int = 2,
-    top_k_values: List[int] = [1, 3, 5, 10]
+    top_k_values: List[int] = [1, 3, 5, 10],
+    force: bool = False
 ) -> dict[str, dict[str, float]]:
     """Evaluate trained model accuracy on a dataset using optimized batch processing.
     
@@ -554,7 +555,7 @@ def evaluate_on_set(
             feature_extractor, 
             layer_name=layer_name,
             cache_dir='test_cache', 
-            force_retrain=True,
+            force_retrain=force,
             batch_size=batch_size,
             pool_size=pool_size
         )
@@ -571,33 +572,32 @@ def evaluate_on_set(
         # Get prediction probabilities for all classes
         start_time = time.perf_counter()
         prediction_probs = svm.predict_proba(features_pca)
+        predictions = svm.predict(features_pca)
         prediction_time = time.perf_counter() - start_time
         logger.info(f"SVM prediction completed in {prediction_time:.2f}s")
         
         # Convert true names to IDs for comparison
         true_names = [str(name) for name in dataset['name']]
         true_ids = [class_mapping.get(name, -1) for name in true_names]
+
+        # Calculate accuracy using sklearn metrics
+        from sklearn.metrics import accuracy_score
+        accuracy = accuracy_score(true_ids, predictions)
+        correct = int(accuracy * len(true_ids))
+        logger.info(f"Direct prediction accuracy: {accuracy:.2%} ({correct}/{len(true_ids)})")
+
+        from sklearn.metrics import top_k_accuracy_score
+        top_1_accuracy = top_k_accuracy_score(true_ids, prediction_probs, k=1)
+        top_3_accuracy = top_k_accuracy_score(true_ids, prediction_probs, k=3)
+        top_5_accuracy = top_k_accuracy_score(true_ids, prediction_probs, k=5)
+        top_10_accuracy = top_k_accuracy_score(true_ids, prediction_probs, k=10)
         
-        # Get top-k predictions for each sample
-        # Sort probabilities in descending order and get indices
-        top_k_predictions = np.argsort(prediction_probs, axis=1)[:, ::-1]
-        
-        # Calculate top-k accuracies
-        accuracies = {}
-        total = len(true_ids)
-        
-        for k in top_k_values:
-            # Ensure k doesn't exceed number of classes
-            k_actual = min(k, prediction_probs.shape[1])
-            
-            # Check if true ID is in top k predictions
-            correct = 0
-            for i, true_id in enumerate(true_ids):
-                if true_id != -1 and true_id in top_k_predictions[i, :k_actual]:
-                    correct += 1
-            
-            accuracy = correct / total if total > 0 else 0.0
-            accuracies[f'top_{k}'] = { "accuracy": accuracy, "correct": correct, "total": total }
+        accuracies = {
+            "top_1": {"accuracy": top_1_accuracy, "correct": round(len(true_ids) * top_1_accuracy), "total": len(true_ids)},
+            "top_3": {"accuracy": top_3_accuracy, "correct": round(len(true_ids) * top_3_accuracy), "total": len(true_ids)},
+            "top_5": {"accuracy": top_5_accuracy, "correct": round(len(true_ids) * top_5_accuracy), "total": len(true_ids)},
+            "top_10": {"accuracy": top_10_accuracy, "correct": round(len(true_ids) * top_10_accuracy), "total": len(true_ids)}
+        }
         
         # Log detailed results
         total_time = feature_extraction_time + pca_time + prediction_time
@@ -718,7 +718,8 @@ def run_and_evaluate(
             batch_size=batch_size, 
             layer_name=layer_name,
             pool_size=pool_size, 
-            top_k_values=top_k_values
+            top_k_values=top_k_values,
+            force=force_features
         )
         for k, v in accuracies.items():
             logger.info(f"{k}: Accuracy: {v['accuracy']:.3f} ({v['correct']}/{v['total']})")
