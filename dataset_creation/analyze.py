@@ -52,36 +52,42 @@ def draw_histogram(data: dict, title: str, x_label: str = "# of images", y_label
     plt.show()
 
 
-sheldrick_path = "images/elephant_images/"
+sheldrick_paths = ["processing/sheldrick/cropped/certain", "processing/sheldrick/cropped/probable"]
 image_paths = []
 sheldrick_elephants = {}
-for folder in os.listdir(sheldrick_path):
-    try:
-        sheldrick_elephants[folder] = len(os.listdir(os.path.join(sheldrick_path, folder)))
-    except NotADirectoryError:
-        continue
+for folder in sheldrick_paths:
+    for elephant in os.listdir(folder):
+        if not elephant.endswith(".jpg"):
+            continue
+        elephant_id = elephant.split("_")[0]
+        if elephant_id not in sheldrick_elephants:
+            sheldrick_elephants[elephant_id] = 1
+        else:
+            sheldrick_elephants[elephant_id] += 1
 
-elpephants_path = "images/ELPephants/"
+elpephants_path = ["processing/ELPephants/cropped/certain", "processing/ELPephants/cropped/probable"]
 elpephants = {}
-for image in os.listdir(elpephants_path):
-    if not image.endswith(".jpg"):
-        continue
-    elephant_id = image.split("_")[0]
-    if elephant_id not in elpephants:
-        elpephants[elephant_id] = 1
-    else:
-        elpephants[elephant_id] += 1
+for folder in elpephants_path:
+    for image in os.listdir(folder):
+        if not image.endswith(".jpg"):
+            continue
+        elephant_id = image.split("_")[0]
+        if elephant_id not in elpephants:
+            elpephants[elephant_id] = 1
+        else:
+            elpephants[elephant_id] += 1
 
 
-#print_with_padding("Sheldrick elephants")
-# draw_histogram(get_frequency_distribution(sheldrick_elephants), "Sheldrick elephants")
+print_with_padding("Sheldrick elephants")
+draw_histogram(get_frequency_distribution(sheldrick_elephants), "Sheldrick elephants")
+print(len(sheldrick_elephants))
 
-#print_with_padding("ELPephants")
-# draw_histogram(get_frequency_distribution(elpephants), "ELPephants")
-# print(len(elpephants))
+print_with_padding("ELPephants")
+draw_histogram(get_frequency_distribution(elpephants), "ELPephants")
+print(len(elpephants))
 
 # Merge the two dictionaries
-merged_elephants = {**sheldrick_elephants, **elpephants}
+merged_elephants = {**sheldrick_elephants}#, **elpephants}
 
 #print_with_padding("Merged elephants")
 #draw_histogram(get_frequency_distribution(merged_elephants), "Merged elephants")
