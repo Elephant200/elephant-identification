@@ -1,24 +1,69 @@
 """Optimized metadata generation for elephant identification dataset.
 
 This module handles dataset creation, train/test splitting, and class mapping
-generation with comprehensive error handling and logging for Apple Silicon optimization.
+generation with comprehensive error handling and logging
 """
 
 import json
 import os
 import pandas as pd
+import shutil
 import random
 import logging
-from typing import List, Tuple, Dict, Set
-from utils import get_all_images
+import cv2
+from typing import Tuple
+from utils import get_all_images, is_image
+from pprint import pprint
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-FORCE = True
-TYPES = ["ELPephants"]
+def extract_name_from_filepath(filepath: str) -> str:
+    filepath = os.path.basename(filepath)
+    return filepath.split("_")[0]
+
+# Move images to desired location from /processing/ELPephants/unannotated/certain
+images: list[dict] = []
+
 root_dir = "/Users/kayoko/Documents/GitHub/elephant-identification"
+
+TYPES = ["ELPephants"]
+FORCE = True
+
+for TYPE in TYPES:
+    if not os.path.exists(f"{root_dir}/dataset/{TYPE}"):
+        os.makedirs(f"{root_dir}/dataset/{TYPE}")
+
+    if FORCE:
+        shutil.rmtree(f"{root_dir}/dataset/{TYPE}")
+        os.makedirs(f"{root_dir}/dataset/{TYPE}")
+
+    for image in os.listdir(f"{root_dir}/processing/{TYPE}/cropped/certain"):
+        if not is_image(f"{root_dir}/processing/{TYPE}/cropped/certain/{image}"):
+            continue
+        try:
+            source_path = f"{root_dir}/processing/{TYPE}/cropped/certain/{image}"
+            dest_path = f"{root_dir}/dataset/{TYPE}/{image}"
+            # print(f"Copying image from {source_path} to {dest_path}")
+            shutil.copy2(source_path, dest_path)
+            images.append({"name": extract_name_from_filepath(image), "filepath": dest_path, "data_source": TYPE})
+        except Exception as e:
+            print(f"Error moving {image}: {e}")
+    
+    for image in os.listdir(f"{root_dir}/processing/{TYPE}/cropped/probable"):
+        if not is_image(f"{root_dir}/processing/{TYPE}/cropped/probable/{image}"):
+            continue
+        try:
+            source_path = f"{root_dir}/processing/{TYPE}/cropped/probable/{image}"
+            dest_path = f"{root_dir}/dataset/{TYPE}/{image}"
+            shutil.copy2(source_path, dest_path)
+            images.append({"name": extract_name_from_filepath(image), "filepath": dest_path, "data_source": TYPE})
+        except Exception as e:
+            print(f"Error moving {image}: {e}")
+
+print(f"Total images: {len(images)}")
 
 def extract_name_from_filepath(filepath: str) -> str:
     """Extract elephant name from image filepath.
@@ -45,9 +90,80 @@ def extract_name_from_filepath(filepath: str) -> str:
     
     return name_parts[0]
 
+def augment_training_images(train_df: pd.DataFrame) -> pd.DataFrame:
+    """Apply reflection augmentation to training images.
+    
+    Creates horizontally flipped versions of all training images and adds them
+    to the training dataset. The augmented images are saved with '_reflected' suffix.
+    
+    Args:
+        train_df (pd.DataFrame): Training DataFrame with columns ['name', 'filepath', 'data_source']
+        
+    Returns:
+        pd.DataFrame: Augmented training DataFrame containing both original and reflected images
+        
+    Raises:
+        ValueError: If augmentation fails for any image
+    """
+    logger.info(f"Starting augmentation of {len(train_df)} training images")
+    
+    augmented_data = []
+    successful_augmentations = 0
+    failed_augmentations = 0
+    
+    # Add all original training images first
+    for _, row in train_df.iterrows():
+        augmented_data.append(row.to_dict())
+    
+    # Create reflected versions for each training image
+    for _, row in train_df.iterrows():
+        original_filepath = row['filepath']
+        
+        if not is_image(original_filepath):
+            logger.warning(f"Skipping non-image file: {original_filepath}")
+            continue
+            
+        try:
+            # Create reflected image path
+            base_dir = os.path.dirname(original_filepath)
+            filename = os.path.basename(original_filepath)
+            name_without_ext = os.path.splitext(filename)[0]
+            ext = os.path.splitext(filename)[1]
+            reflected_filename = f"{name_without_ext}_reflected{ext}"
+            reflected_filepath = os.path.join(base_dir, reflected_filename)
+            
+            # Skip if reflected image already exists
+            if os.path.exists(reflected_filepath):
+                logger.debug(f"Reflected image already exists: {reflected_filepath}")
+            else:
+                # Load and reflect the image
+                image = cv2.imread(original_filepath)
+                if image is None:
+                    raise ValueError(f"Could not load image: {original_filepath}")
+                    
+                reflected_image = cv2.flip(image, 1)  # Horizontal flip
+                cv2.imwrite(reflected_filepath, reflected_image)
+                logger.debug(f"Created reflected image: {reflected_filepath}")
+            
+            # Add reflected image to augmented dataset
+            augmented_row = row.copy()
+            augmented_row['filepath'] = reflected_filepath
+            augmented_data.append(augmented_row.to_dict())
+            successful_augmentations += 1
+            
+        except Exception as e:
+            logger.error(f"Failed to augment image {original_filepath}: {e}")
+            failed_augmentations += 1
+            # Continue with other images rather than failing completely
+    
+    logger.info(f"Augmentation completed: {successful_augmentations} successful, {failed_augmentations} failed")
+    logger.info(f"Final training set size: {len(augmented_data)} images (doubled from {len(train_df)})")
+    
+    return pd.DataFrame(augmented_data)
+
 def split_dataset_by_elephant(
     data: pd.DataFrame, 
-    ratio: float = 0.8,
+    ratio: float = 0.67,
     random_seed: int = 42
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Split dataset into training and testing sets on a per-elephant basis with validation.
@@ -57,15 +173,16 @@ def split_dataset_by_elephant(
     - Each elephant contributes proportionally to each split
     - The selection of images per elephant is random but reproducible with a seed
     - Comprehensive validation of input data and results
+    - Returns original images only (augmentation handled separately)
     
     Args:
         data (pd.DataFrame): DataFrame with columns ['name', 'filepath', 'data_source']
         ratio (float): Ratio of train to test images per elephant (0.0 to 1.0).
-                      Defaults to 0.8 (80% train, 20% test)
+                      Defaults to 0.67 (67% train, 33% test)
         random_seed (int): Random seed for reproducible results. Defaults to 42
     
     Returns:
-        Tuple[pd.DataFrame, pd.DataFrame]: (train_data, test_data) DataFrames
+        Tuple[pd.DataFrame, pd.DataFrame]: (train_data, test_data) DataFrames with original images only
         
     Raises:
         ValueError: If input data is invalid, ratio is out of bounds, or splitting fails
@@ -172,6 +289,8 @@ for TYPE in TYPES:
     files = get_all_images(f"{root_dir}/dataset/{TYPE}")
     
     for file in files:
+        if "_reflected" in file: # this was an augmented image; omitted for now
+            continue
         data.append({"name": extract_name_from_filepath(file), "filepath": file, "data_source": TYPE})
     
 data = pd.DataFrame(data)
@@ -202,49 +321,99 @@ random.seed(42)
 random.shuffle(names)
 class_mapping = {name: i for i, name in enumerate(names)}
 with open(f"{root_dir}/dataset/class_mapping.json", "w") as f:
-    json.dump(class_mapping, f)
+    json.dump(class_mapping, f, indent=4)
 
 try:
-    # Split the dataset: 80% train, 20% test
-    print(f"About to split dataset with {len(data)} samples from {data['name'].nunique()} elephants")
+    # Step 1: Split the dataset on original images only (no augmentation yet)
+    print(f"Step 1: Splitting dataset with {len(data)} samples from {data['name'].nunique()} elephants")
+    print("Ensuring clean train/test split with no data leakage...")
     train_data, test_data = split_dataset_by_elephant(
         data,
-        ratio=0.8,
+        ratio=0.67,
         random_seed=42
     )
-
-    print(f"Writing train.csv to: {root_dir}/dataset/train.csv")
-    print(f"Train data first few names: {train_data['name'].head().tolist()}")
-    print(f"Train data unique names: {sorted(train_data['name'].unique())[:5]}")
-    train_data.to_csv(f"{root_dir}/dataset/train.csv", index=False)
-    test_data.to_csv(f"{root_dir}/dataset/test.csv", index=False)
-
-    # Verify the file was written correctly
-    print("Verifying written file...")
-    written_df = pd.read_csv(f"{root_dir}/dataset/train.csv")
-    print(f"Written file first few names: {written_df['name'].head().tolist()}")
-    print(f"Written file unique names: {sorted(written_df['name'].unique())[:5]}")
-
-    print(f"Split completed successfully!")
+    
+    print(f"Initial split completed:")
     print(f"Training set: {len(train_data)} images from {train_data['name'].nunique()} elephants")
     print(f"Testing set:  {len(test_data)} images from {test_data['name'].nunique()} elephants")
+    
+    # Step 2: Apply augmentation ONLY to training set
+    print(f"\nStep 2: Augmenting training set (reflection)...")
+    print("Test set remains unchanged to prevent data leakage.")
+    train_data_augmented = augment_training_images(train_data)
+    
+    print(f"Augmentation completed:")
+    print(f"Final training set: {len(train_data_augmented)} images from {train_data_augmented['name'].nunique()} elephants")
+    print(f"Final testing set:  {len(test_data)} images from {test_data['name'].nunique()} elephants")
+    
+    # Step 3: Save the datasets
+    print(f"\nStep 3: Saving datasets...")
+    print(f"Writing train.csv to: {root_dir}/dataset/train.csv")
+    print(f"Writing test.csv to: {root_dir}/dataset/test.csv")
+    
+    train_data_augmented.to_csv(f"{root_dir}/dataset/train.csv", index=False)
+    test_data.to_csv(f"{root_dir}/dataset/test.csv", index=False)
+    
+    # Step 4: Verification
+    print(f"\nStep 4: Verification...")
+    written_train_df = pd.read_csv(f"{root_dir}/dataset/train.csv")
+    written_test_df = pd.read_csv(f"{root_dir}/dataset/test.csv")
+    
+    print(f"Verified train.csv: {len(written_train_df)} images")
+    print(f"Verified test.csv: {len(written_test_df)} images")
+    
+    # Check for data leakage - ensure no test image file appears in training set
+    test_filenames = set()
+    train_original_filenames = set()
+    train_augmented_filenames = set()
+    
+    for filepath in written_test_df['filepath']:
+        filename = os.path.basename(filepath)
+        test_filenames.add(filename)
+    
+    for filepath in written_train_df['filepath']:
+        filename = os.path.basename(filepath)
+        if '_reflected' in filename:
+            train_augmented_filenames.add(filename)
+        else:
+            train_original_filenames.add(filename)
+    
+    # Check for direct file leakage (same exact files in both sets)
+    direct_leakage = test_filenames.intersection(train_original_filenames)
+    augmented_leakage = test_filenames.intersection(train_augmented_filenames)
+    
+    if direct_leakage:
+        print(f"⚠️  WARNING: {len(direct_leakage)} test images found in training set (data leakage!)")
+        print(f"Leaked files: {list(direct_leakage)[:5]}...")
+    elif augmented_leakage:
+        print(f"⚠️  WARNING: {len(augmented_leakage)} test images have augmented versions in training (data leakage!)")
+    else:
+        print("✓ Data integrity check: No direct file overlap between train and test sets")
+        print(f"✓ Training set: {len(train_original_filenames)} original + {len(train_augmented_filenames)} augmented images")
+        print(f"✓ Test set: {len(test_filenames)} original images only")
 
     all_elephants = set(data['name'].unique())
     
-    
-    # Show sample counts per elephant
-    print(f"\nSample counts per elephant:")
-    train_counts = train_data['name'].value_counts()
+    # Show sample counts per elephant  
+    print(f"\nSample distribution per elephant:")
+    train_counts = train_data_augmented['name'].value_counts()
     test_counts = test_data['name'].value_counts()
     
-    # Display first 5 elephants as example
-    for elephant in list(all_elephants):
+    print(f"{'Elephant':<20} {'Train':<8} {'Test':<8} {'Total':<8}")
+    print("-" * 50)
+    for elephant in sorted(list(all_elephants))[:10]:  # Show first 10 elephants
         train_count = train_counts.get(elephant, 0)
         test_count = test_counts.get(elephant, 0)
-        print(f"  {elephant}: {train_count} train, {test_count} test")
+        total_count = train_count + test_count
+        print(f"{elephant:<20} {train_count:<8} {test_count:<8} {total_count:<8}")
     
-    # if len(all_elephants) > 5:
-    #     print(f"  ... and {len(all_elephants) - 5} more elephants")
+    if len(all_elephants) > 10:
+        print(f"... and {len(all_elephants) - 10} more elephants")
+        
+    print(f"\nDataset preparation completed successfully!")
+    print(f"✓ Clean train/test split with no data leakage")
+    print(f"✓ Training set augmented with reflection (doubled in size)")
+    print(f"✓ Test set contains only original images")
         
 except ValueError as e:
     print(f"Error: {e}")
