@@ -724,6 +724,8 @@ def run_and_evaluate(
         for k, v in accuracies.items():
             logger.info(f"{k}: Accuracy: {v['accuracy']:.3f} ({v['correct']}/{v['total']})")
 
+        return accuracies
+
     except Exception as e:
         logger.error(f"Pipeline execution failed: {e}")
         raise
