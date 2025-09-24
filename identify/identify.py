@@ -22,7 +22,7 @@ from utils import print_with_padding
 
 # Configure logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 if not logger.handlers:
     console_handler = logging.StreamHandler()
@@ -754,8 +754,8 @@ if __name__ == "__main__":
     parser.add_argument(
         '--n-components', 
         type=int, 
-        default=350, 
-        help='Number of PCA components (default: 350)'
+        default=10000, 
+        help='Number of PCA components (default: 10000)'
     )
     parser.add_argument(
         '--batch-size', 
