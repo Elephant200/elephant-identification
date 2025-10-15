@@ -2,15 +2,32 @@ from identify.identify import run_and_evaluate
 from utils import print_with_padding
 
 if __name__ == "__main__":
-    all_layer_names = [
-        "conv3_block4_2_relu",
-        #"conv4_block6_2_relu",
-        "conv4_block6_out", # 40th activation layer
-        "conv5_block1_out", # 43rd activation layer
-        #"conv5_block3_2_relu"
-    ]
-    all_pool_sizes = [1, 2, 4, 6]
-    all_n_components = [10000] # Higher than needed for max possible PCA components
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description='Tune the ResNet50 model for elephant identification'
+    )
+    parser.add_argument(
+        '--optimal', 
+        type=bool,
+        help='Use the optimal layer and pool size'
+    )
+    args = parser.parse_args()
+    if args.optimal:
+        all_layer_names = ["conv4_block6_out"]
+        all_pool_sizes = [6]
+        all_n_components = [10000]
+    else:
+        all_layer_names = [
+            "conv3_block4_2_relu",
+            #"conv4_block6_2_relu",
+            "conv4_block6_out", # 40th activation layer
+            "conv5_block1_out", # 43rd activation layer
+            #"conv5_block3_2_relu"
+        ]
+        all_pool_sizes = [1, 2, 4, 6]
+        all_n_components = [10000] # Higher than needed for max possible PCA components
+
     accuracies = {}
     for layer_name in all_layer_names:
         for pool_size in all_pool_sizes:
