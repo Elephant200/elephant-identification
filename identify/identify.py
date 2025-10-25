@@ -121,7 +121,7 @@ def extract_raw_features(
     data_df: pd.DataFrame, 
     feature_extractor: keras.Model, 
     layer_name: str, 
-    cache_dir: str = 'train_cache', 
+    cache_dir: str = 'identify/train_cache', 
     force_retrain: bool = False,
     batch_size: int | None = None,
     pool_size: int = 2
@@ -134,7 +134,7 @@ def extract_raw_features(
         feature_extractor (keras.Model): Pre-trained model for feature extraction
         layer_name (str): Name of the layer to extract features from. Only used for cache file naming
                          Defaults to 'conv3_block4_2_relu'
-        cache_dir (str): Directory to store cached features. Defaults to 'train_cache'
+        cache_dir (str): Directory to store cached features. Defaults to 'identify/train_cache'
         force_retrain (bool): If True, ignore cached features and recompute. 
                              Defaults to False
         batch_size (int | None): Batch size for processing. If None, uses optimal size
@@ -211,7 +211,7 @@ def extract_raw_features(
 def train_pca(
     features: List[np.ndarray], 
     n_components: int = 500, 
-    cache_dir: str = 'train_cache', 
+    cache_dir: str = 'identify/train_cache', 
     layer_name: str = 'conv3_block4_2_relu', 
     force_retrain: bool = False,
     pool_size: int = 2
@@ -223,7 +223,7 @@ def train_pca(
         n_components (int): Number of principal components to retain. 
                            Defaults to 500
         cache_dir (str): Directory to store cached PCA results. 
-                        Defaults to 'train_cache'
+                        Defaults to 'identify/train_cache'
         layer_name (str): Name of the feature extraction layer for cache naming. 
                          Defaults to 'conv3_block4_2_relu'
         force_retrain (bool): If True, ignore cached PCA and recompute. 
@@ -292,7 +292,7 @@ def train_pca(
 def train_svm(
     X_train: np.ndarray, 
     y_train: List[int], 
-    cache_dir: str = 'train_cache', 
+    cache_dir: str = 'identify/train_cache', 
     layer_name: str = 'conv3_block4_2_relu', 
     n_components: int = 500, 
     force_retrain: bool = False,
@@ -305,7 +305,7 @@ def train_svm(
                              shape (n_samples, n_components)
         y_train (List[int]): Training labels as class indices
         cache_dir (str): Directory to store cached SVM model. 
-                        Defaults to 'train_cache'
+                        Defaults to 'identify/train_cache'
         layer_name (str): Name of the feature extraction layer for cache naming. 
                          Defaults to 'conv3_block4_2_relu'
         n_components (int): Number of PCA components used for cache naming. 
