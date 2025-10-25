@@ -555,7 +555,7 @@ def evaluate_on_set(
             dataset, 
             feature_extractor, 
             layer_name=layer_name,
-            cache_dir='test_cache', 
+            cache_dir='identify/test_cache', 
             force_retrain=force,
             batch_size=batch_size,
             pool_size=pool_size
@@ -610,7 +610,7 @@ def evaluate_on_set(
         logger.debug(f"Evaluation completed in {total_time:.2f}s")
         
         # Clean up temporary cache
-        temp_cache_dir = 'temp_eval_cache'
+        temp_cache_dir = 'identify/temp_eval_cache'
         if os.path.exists(temp_cache_dir):
             shutil.rmtree(temp_cache_dir)
             logger.debug("Cleaned up temporary evaluation cache")
