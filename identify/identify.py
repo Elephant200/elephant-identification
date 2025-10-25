@@ -16,6 +16,7 @@ from keras.applications.resnet import preprocess_input
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score
 from tqdm import tqdm
 
 from utils import print_with_padding
@@ -581,7 +582,6 @@ def evaluate_on_set(
         true_ids = [class_mapping.get(name, -1) for name in true_names]
 
         # Calculate accuracy using sklearn metrics
-        from sklearn.metrics import accuracy_score
         accuracy = accuracy_score(true_ids, predictions)
         correct = int(accuracy * len(true_ids))
         logger.info(f"Direct prediction accuracy: {accuracy:.2%} ({correct}/{len(true_ids)})")
@@ -591,6 +591,13 @@ def evaluate_on_set(
         top_3_accuracy = top_k_accuracy_score(true_ids, prediction_probs, k=3)
         top_5_accuracy = top_k_accuracy_score(true_ids, prediction_probs, k=5)
         top_10_accuracy = top_k_accuracy_score(true_ids, prediction_probs, k=10)
+
+        # Print out probabilities for each of the 10 highest probability classes, ordered by probability
+        top10_probs = np.sort(prediction_probs, axis=1)[:, ::-1][:, :10]
+        for i in range(10):
+            print(f"Top {i+1} probability: {top10_probs[0][i]}")
+
+        
         
         accuracies = {
             "top_1": {"accuracy": top_1_accuracy, "correct": round(len(true_ids) * top_1_accuracy), "total": len(true_ids)},
