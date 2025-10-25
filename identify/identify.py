@@ -16,7 +16,7 @@ from keras.applications.resnet import preprocess_input
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, top_k_accuracy_score
 from tqdm import tqdm
 
 from utils import print_with_padding
@@ -586,7 +586,6 @@ def evaluate_on_set(
         correct = int(accuracy * len(true_ids))
         logger.info(f"Direct prediction accuracy: {accuracy:.2%} ({correct}/{len(true_ids)})")
 
-        from sklearn.metrics import top_k_accuracy_score
         top_1_accuracy = top_k_accuracy_score(true_ids, prediction_probs, k=1)
         top_3_accuracy = top_k_accuracy_score(true_ids, prediction_probs, k=3)
         top_5_accuracy = top_k_accuracy_score(true_ids, prediction_probs, k=5)
