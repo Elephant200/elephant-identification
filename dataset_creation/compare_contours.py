@@ -5,6 +5,9 @@ import random
 import cv2
 import numpy as np
 from dotenv import load_dotenv
+from inference.models.sam2 import SegmentAnything2
+from inference.core.entities.requests.sam2 import Sam2PromptSet, Sam2Prompt, Box
+from inference.core.utils.postprocess import masks2poly
 from inference_sdk import InferenceHTTPClient
 import supervision as sv
 
@@ -175,14 +178,36 @@ while True:
         image = preprocess_image(image)
         overlay = image.copy()
 
+        x_max = 0
+        y_max = 0
+        x_min = image.shape[1]
+        y_min = image.shape[0]
+
         for model_id in model_ids:
             print(f"--------------------------------{model_id}--------------------------------")
             print(image_path)
             prediction = get_prediction(CLIENT, f"curvrank-contours-zddtc/{model_id}", overlay)
             pprint(prediction)
-            
-            draw_contours(overlay, prediction, -1, colors[model_id])
+            for pred in prediction:
+                for point in pred["points"]:
+                    x, y = point
+                    x_max = max(x_max, x)
+                    y_max = max(y_max, y)
+                    x_min = min(x_min, x)
+                    y_min = min(y_min, y)
+            draw_contours(overlay, prediction, -1, colors[model_id], 1)
             print(colors[model_id])
+        
+        # # Use sam2 to segment the image
+
+        # sam2 = SegmentAnything2(model_id="sam2/hiera_large")
+
+        # sam2.embed_image(image)
+
+        # prompts = Sam2PromptSet(prompts=[Sam2Prompt(box=(x_min, y_min, x_max, y_max))])
+        # contours = sam2.segment_image(image, prompts=prompts)
+        # contours = masks2poly(contours[0])
+        # draw_contours(overlay, contours, -1, colors["12"], 2)
 
         # Resize image to base_width width
         base_width = 1920
