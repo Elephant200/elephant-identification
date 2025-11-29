@@ -28,7 +28,7 @@ if api_key is None:
 
 project_id = "curvrank-contours-zddtc"
 
-model_ids = ["2"]
+model_ids = ["6"]
 
 colors = {
     "1": (255, 0, 0), # Red
