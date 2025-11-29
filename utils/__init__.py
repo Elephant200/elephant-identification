@@ -7,6 +7,9 @@ from .input import get_int, get_multiple_choice, get_list_of_ints
 # File utilities
 from .files import get_list_of_files, get_files_from_dir, is_image, get_all_images
 
+# Contour utilities
+from .contours import draw_contours, resample_polyline
+
 # Make all functions available at package level for backward compatibility
 __all__ = [
     'pad_with_char', 
@@ -19,4 +22,6 @@ __all__ = [
     'get_files_from_dir',
     'is_image',
     'get_all_images',
+    'draw_contours',
+    'resample_polyline',
 ]

@@ -1,8 +1,7 @@
 import cv2
 import numpy as np
 import json
-from curvrank.utils import resample_polyline
-
+from utils import resample_polyline
 
 if __name__ == "__main__":
 

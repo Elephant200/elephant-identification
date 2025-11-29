@@ -19,6 +19,7 @@ from utils import (
     get_multiple_choice,
     is_image,
     print_with_padding,
+    draw_contours,
 )
 
 load_dotenv()
@@ -69,26 +70,6 @@ def get_prediction(client: InferenceHTTPClient, model_id: str, image_path: str) 
         for prediction in predictions
     ]
     return predictions
-
-def draw_contours(
-        image: np.ndarray,
-        contours: list[list[tuple[int, int]]],
-        contourIdx: int = -1,
-        color: tuple[int, int, int] = (0, 0, 255),
-        thickness: int = 2
-    ):
-    """
-    Wrapper for cv2.drawContours
-
-    Args:
-        image (np.ndarray): The image to draw the contours on.
-        contours (list[list[tuple[int, int]]]): The contours to draw.
-
-    Returns:
-        np.ndarray: The image with the contours drawn on it.
-    """
-    contours = [np.array(contour["points"]) for contour in contours]
-    cv2.drawContours(image, contours, contourIdx, color, thickness)
 
 def preprocess_image(image: np.ndarray) -> np.ndarray:
     """
@@ -195,7 +176,13 @@ while True:
                     y_max = max(y_max, y)
                     x_min = min(x_min, x)
                     y_min = min(y_min, y)
-            draw_contours(overlay, prediction, -1, colors[model_id], 1)
+            draw_contours(
+                image=overlay,
+                contours=prediction,
+                color=colors[model_id],
+                thickness=1,
+                draw_points=True
+            )
             print(colors[model_id])
         
         # # Use sam2 to segment the image
