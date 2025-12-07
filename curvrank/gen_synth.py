@@ -7,7 +7,7 @@ if __name__ == "__main__":
 
     with open("curvrank/ex_contour.json", "r") as f:
         data = json.load(f)
-    polyline = np.array([[point["x"], point["y"]] for point in data["predictions"][0]["points"]])
+    polyline = np.array([[int(point["x"]), int(point["y"])] for point in data["predictions"][0]["points"]])
     polyline = polyline * 2
 
     image = cv2.imread("curvrank/ex_image.jpg")
