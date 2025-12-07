@@ -16,8 +16,9 @@ def combine_results(results1: np.ndarray, results2: np.ndarray, w1: float, w2: f
     """
     eps = 1e-12
 
-    w1 = w1 / ( w1 + w2 )
-    w2 = w2 / ( w1 + w2 )
+    weight_sum = w1 + w2
+    w1 = w1 / weight_sum
+    w2 = w2 / weight_sum
 
     logP = w1 * np.log(results1 + eps) + w2 * np.log(results2 + eps)
     logP = logP - logsumexp(logP, axis=1, keepdims=True)
