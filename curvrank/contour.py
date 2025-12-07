@@ -77,7 +77,7 @@ def get_anchor_points(image_path: str) -> list[dict]:
         })
     return anchor_point_pairs
 
-def cut_contours_by_anchors(contours: list[np.ndarray], anchor_point_predictions: list[dict]) -> list[np.ndarray]:
+def cut_contours_by_anchors(contours: list[np.ndarray], anchor_point_predictions: list[dict]) -> tuple[list[np.ndarray], list[Literal["left", "right"]]]:
     """
     Cut contours by anchor points and return the longer segments.
 
@@ -87,8 +87,10 @@ def cut_contours_by_anchors(contours: list[np.ndarray], anchor_point_predictions
 
     Returns:
         list[np.ndarray]: The contours with shorter segments removed.
+        list[Literal["left", "right"]]: For each contour, whether it is a left or right ear.
     """
     result = []
+    views: list[Literal["left", "right"]] = []
     for contour_pts in contours:
         contour_centroid = np.mean(contour_pts, axis=0)
         
@@ -103,6 +105,11 @@ def cut_contours_by_anchors(contours: list[np.ndarray], anchor_point_predictions
         dists2 = np.linalg.norm(contour_pts - anchor2, axis=1)
         idx1, idx2 = np.argmin(dists1), np.argmin(dists2)
         
+        if ((anchor1 + anchor2) / 2)[0] > contour_centroid[0]:
+            views.append("right")
+        else:
+            views.append("left")
+
         # Get both possible segments
         if idx1 > idx2:
             idx1, idx2 = idx2, idx1
@@ -112,10 +119,10 @@ def cut_contours_by_anchors(contours: list[np.ndarray], anchor_point_predictions
         # Keep the longer segment
         result.append(segment_a if len(segment_a) > len(segment_b) else segment_b)
     
-    return result
+    return result, views
 
 
-def get_contour(image_path: str, view: Literal["side", "front", "auto"] = "auto") -> list[np.ndarray]:
+def get_contour(image_path: str, view: Literal["side", "front", "auto"] = "auto") -> tuple[list[np.ndarray], list[Literal["left", "right"]]]:
     """
     Get the coarse contour, removing the shorter portion of the ear as defined by the anchor points. Calls the get_contour_predictions and get_anchor_points functions.
 
@@ -125,6 +132,7 @@ def get_contour(image_path: str, view: Literal["side", "front", "auto"] = "auto"
 
     Returns:
         list[np.ndarray]: The coarse contours for the image. Each is a shape (n, 2) array of contour points.
+        list[Literal["left", "right"]]: For each contour, whether it is a left or right ear.
     """
     raw_predictions = get_contour_predictions(image_path)
     anchor_point_predictions = get_anchor_points(image_path)
@@ -168,10 +176,10 @@ def get_contour(image_path: str, view: Literal["side", "front", "auto"] = "auto"
         contours.append(resampled)
 
     # Cut contours by anchor points
-    contours = cut_contours_by_anchors(contours, anchor_point_predictions)
+    contours, views = cut_contours_by_anchors(contours, anchor_point_predictions)
 
     # Convert to lists of tuples
-    return [orient_contour(contour) for contour in contours]
+    return [orient_contour(contour) for contour in contours], views
 
 def orient_contour(contour: np.ndarray) -> np.ndarray:
     """
@@ -217,7 +225,7 @@ def visualize_contour(image_path: str):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-    predictions = get_contour(image_path)
+    predictions, views = get_contour(image_path)
 
     image = base_image.copy()
 
@@ -233,13 +241,13 @@ def visualize_contour(image_path: str):
         cv2.circle(image, contour[0], 10, (255, 255, 255), -1)
         cv2.circle(image, contour[-1], 10, (255, 0, 0), -1)
 
-    cv2.imshow("image", image)
+    cv2.imshow(f"image {', '.join(views)}", image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
 
 def save_contour_for_image(image_path: str):
-    predictions = get_contour(image_path)
+    predictions, _ = get_contour(image_path)
 
     image = cv2.imread(image_path)
 
