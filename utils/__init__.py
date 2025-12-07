@@ -8,7 +8,10 @@ from .input import get_int, get_multiple_choice, get_list_of_ints
 from .files import get_list_of_files, get_files_from_dir, is_image, get_all_images
 
 # Contour utilities
-from .contours import draw_contours, resample_polyline
+from .contours import draw_contours, resample_polyline, resample2d, resample1d
+
+# Result utilities
+from .results import combine_results
 
 # Make all functions available at package level for backward compatibility
 __all__ = [
@@ -24,4 +27,7 @@ __all__ = [
     'get_all_images',
     'draw_contours',
     'resample_polyline',
+    'resample2d',
+    'resample1d',
+    'combine_results',
 ]
