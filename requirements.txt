@@ -12,9 +12,14 @@ keras
 python-dotenv
 opencv-python
 supervision
-inference
+inference[transformers,sam,clip,gaze,grounding-dino,yolo-world]
 timm
-PIL
 torch
-wildlife-tools
+torchvision
 pytorch-metric-learning
+roboflow
+supervision
+samv2
+detectron2
+streamlit
+streamlit-drawable-canvas
