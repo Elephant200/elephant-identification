@@ -1,5 +1,5 @@
 """
-Code to extract contours from images
+Code to extract contours from images. The most important function is get_contour, which returns the contours and views for an image.
 """
 import os
 from pprint import pprint
