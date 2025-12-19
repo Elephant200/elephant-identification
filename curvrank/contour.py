@@ -9,7 +9,7 @@ import cv2
 from inference_sdk import InferenceHTTPClient, InferenceConfiguration
 from dotenv import load_dotenv
 
-from utils import resample_polyline
+from utils import resample_polyline, get_files_from_dir
 
 
 load_dotenv()
@@ -82,7 +82,7 @@ def cut_contours_by_anchors(contours: list[np.ndarray], anchor_point_predictions
     Cut contours by anchor points and return the longer segments.
 
     Args:
-        contours (list[np.ndarray]): List of contour point arrays.
+        contours (list[np.ndarray]): List of contour point arrays. Maximum length is 2.
         anchor_point_predictions (list[dict]): The anchor point predictions.
 
     Returns:
@@ -91,6 +91,9 @@ def cut_contours_by_anchors(contours: list[np.ndarray], anchor_point_predictions
     """
     result = []
     views: list[Literal["left", "right"]] = []
+    if len(contours) > len(anchor_point_predictions):
+        raise ValueError(f"Insufficient anchor point predictions: {len(contours)} contours but {len(anchor_point_predictions)} anchor point predictions")
+    
     for contour_pts in contours:
         contour_centroid = np.mean(contour_pts, axis=0)
         
@@ -269,11 +272,24 @@ if __name__ == "__main__":
     import cv2
     from utils import draw_contours, get_all_images
     import random
-    image_paths = get_all_images("dataset/tough")
 
-    sample_num = int(input("Enter the number of images to sample, or -1 for all: "))
+    import sys
+    if len(sys.argv) > 1:
+        for arg in sys.argv[1:]:
+            if arg.lower().endswith(('.jpg', '.jpeg', '.png')):
+                try:
+                    visualize_contour(arg)
+                except Exception as e:
+                    print(f"Error visualizing contour for image {arg}\nError Message: {e}")
+        sys.exit(0)
+    
+    image_paths = get_all_images("curvrank/preprocessed")
+
+    sample_num = int(input("Enter the number of images to sample, 0 for manual input, or -1 for all: "))
     sample_num = sample_num if sample_num != -1 else len(image_paths)
     image_paths = random.sample(image_paths, sample_num)
+    if sample_num == 0:
+        image_paths = get_files_from_dir("Please enter the image paths below.")
     
     for image_path in image_paths:
         visualize_contour(image_path)
