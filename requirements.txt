@@ -12,7 +12,8 @@ keras
 python-dotenv
 opencv-python
 supervision
-inference[transformers,sam,clip,gaze,grounding-dino,yolo-world]
+inference[transformers,sam,sam3,clip,gaze,grounding-dino,yolo-world]
+sam3
 timm
 torch
 torchvision
