@@ -15,6 +15,13 @@ def clamp(x, lower, upper):
     """Equivalent to max(lower, min(x, upper))"""
     return max(lower, min(x, upper))
 
+def remove_background(image: np.ndarray) -> np.ndarray:
+    """
+    Remove the background from the image using SAM3
+    """
+
+    return image
+
 def preprocess_images(image_paths: list[str], output_dir: str = "curvrank/preprocessed", force: bool = False) -> tuple[list[str], list[Literal["left", "right"]], list[str]]:
     """
     Preprocess the images to prepare for contour extraction, descriptor calculation, and LNBNN matching.
@@ -31,17 +38,20 @@ def preprocess_images(image_paths: list[str], output_dir: str = "curvrank/prepro
     failed_images: list[str] = []
     os.makedirs(output_dir, exist_ok=True)
 
+    out_paths: list[str] = []
+    out_views: list[Literal["left", "right"]] = []
+    out_names: list[str] = []
+
     if not force:
         existing_images = [f for f in os.listdir(output_dir) if f.endswith(".jpg")]
         image_paths = [ip for ip in image_paths if f"{ip.split('/')[-1].split('.')[0]}_right.jpg" not in existing_images and f"{ip.split('/')[-1].split('.')[0]}_left.jpg" not in existing_images]
         if len(image_paths) == 0:
             print("No images to preprocess")
-
         print(f"Skipping {len(existing_images)} images that already exist")
-
-    out_paths: list[str] = []
-    out_views: list[Literal["left", "right"]] = []
-    out_names: list[str] = []
+        for ip in existing_images:
+            out_paths.append(os.path.join(output_dir, ip))
+            out_views.append(ip.split(".")[0].split("_")[-1])
+            out_names.append("_".join(ip.split(".")[0].split("_")[:-1]))
 
     for image_path in tqdm(image_paths, desc="Preprocessing images"):
         name = image_path.split("/")[-1].split("_")[0]
@@ -89,15 +99,42 @@ def preprocess_images(image_paths: list[str], output_dir: str = "curvrank/prepro
 
     return out_paths, out_views, out_names
 
+def get_contours(image_paths: list[str], force: bool = False):
+    contours = []
+    for image_path in image_paths:
+        try:
+            contours, views = get_contour(image_path)
+        except Exception as e:
+            print(f"Error getting contours for image {image_path}\nError Message: {e}")
+            continue
+        contours.extend(contours)
+    return contours
+
 def pipeline(image_paths: list[str]) -> list[tuple[str, list[np.ndarray]]]:
     """
     Pipeline to perform contour extraction, descriptor calculation, and LNBNN matching.
     """
     image_paths, views, names = preprocess_images(image_paths, output_dir="curvrank/preprocessed")
+    print(f"Preprocessed {len(image_paths)} images")
+    print(f"Views: {len(views)}")
+    print(f"Names: {len(names)}")
+    for ip, view, name in zip(image_paths, views, names):
+        # Check files exist and view / name match
+        if not os.path.exists(ip):
+            print(f"File {ip} does not exist")
+            continue
+        if view != ip.split("_")[-1].split(".")[0]:
+            print(f"View {view} does not match {ip.split('_')[-1]}")
+            continue
+        if name != "_".join(ip.split("/")[-1].split("_")[:-1]):
+            print(f"Name {name} does not match {'_'.join(ip.split('/')[-1].split('_')[:-1])}")
+            continue
+    print(f"All images match")
 
 if __name__ == "__main__":
     image_paths = get_all_images("processing/ELPephants/unannotated/certain")
-    preprocess_images(image_paths, output_dir="curvrank/preprocessed")
+    #preprocess_images(image_paths, output_dir="curvrank/preprocessed")
+    pipeline(image_paths)
 
     # for name, descriptors in pipeline(image_paths, views, names):
     #     print(name, descriptors)
