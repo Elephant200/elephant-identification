@@ -80,7 +80,7 @@ def draw_contours(
     cv2.drawContours(
         image=image,
         contours=contours,
-        contourIdx=-1,
+        contourIdx=contourIdx,
         color=color,
         thickness=thickness
     )
