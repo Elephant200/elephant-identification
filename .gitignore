@@ -9,7 +9,4 @@ dataset/
 
 __pycache__/
 
-train_cache/
-test_cache/
-
 processing/

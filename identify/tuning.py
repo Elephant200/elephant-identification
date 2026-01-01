@@ -30,8 +30,7 @@ def run_tuning(
     pool_sizes: list[int],
     n_components_list: list[int],
     top_k_values: list[int] | None = None,
-    cache_dir: str = 'identify/train_cache',
-    test_cache_dir: str = 'identify/test_cache',
+    cache_dir: str = 'identify/.cache',
     device: str = 'auto'
 ) -> dict:
     """Run hyperparameter tuning across different configurations.
@@ -44,8 +43,7 @@ def run_tuning(
         pool_sizes: List of pool sizes to test
         n_components_list: List of PCA component counts to test
         top_k_values: List of k values for top-k accuracy
-        cache_dir: Directory to cache training features
-        test_cache_dir: Directory to cache test features
+        cache_dir: Directory to cache features
         device: TensorFlow device to use
 
     Returns:
@@ -80,7 +78,7 @@ def run_tuning(
                 results = model.evaluate(
                     test_df,
                     top_k_values=top_k_values,
-                    cache_dir=test_cache_dir,
+                    cache_dir=cache_dir,
                     force=False
                 )
 
