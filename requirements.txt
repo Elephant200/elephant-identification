@@ -21,6 +21,5 @@ pytorch-metric-learning
 roboflow
 supervision
 samv2
-detectron2
 streamlit
 streamlit-drawable-canvas
