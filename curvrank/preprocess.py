@@ -165,15 +165,15 @@ def preprocess_images(image_paths: list[str], output_dir: str = "curvrank/prepro
     return out_paths, out_views, out_names
 
 def get_contours(image_paths: list[str], force: bool = False):
-    contours = []
+    all_contours = []
     for image_path in image_paths:
         try:
             contours, views = get_contour(image_path)
         except Exception as e:
             print(f"Error getting contours for image {image_path}\nError Message: {e}")
             continue
-        contours.extend(contours)
-    return contours
+        all_contours.extend(contours)
+    return all_contours
 
 if __name__ == "__main__":
     for image in get_list_of_files("Enter the path to the images to preprocess: "):
