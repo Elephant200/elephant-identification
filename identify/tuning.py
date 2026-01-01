@@ -1,18 +1,177 @@
-from identify.identify import run_and_evaluate
+"""Hyperparameter tuning script for elephant identification model.
+
+Tests different layer names, pool sizes, and PCA components to find optimal configuration.
+"""
+import argparse
+import json
+import logging
+
+import pandas as pd
+
+from .core import configure_tensorflow
+from .model import ElephantIdentifier
 from utils import print_with_padding
 
-if __name__ == "__main__":
-    import argparse
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
+if not logger.handlers:
+    console_handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(levelname)s: %(message)s')
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+
+def run_tuning(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    class_mapping: dict,
+    layer_names: list[str],
+    pool_sizes: list[int],
+    n_components_list: list[int],
+    top_k_values: list[int] | None = None,
+    cache_dir: str = 'identify/train_cache',
+    test_cache_dir: str = 'identify/test_cache',
+    device: str = 'auto'
+) -> dict:
+    """Run hyperparameter tuning across different configurations.
+
+    Args:
+        train_df: Training DataFrame with columns ['filepath', 'name']
+        test_df: Test DataFrame with columns ['filepath', 'name']
+        class_mapping: Dict mapping elephant name/ID to class index
+        layer_names: List of ResNet50 layer names to test
+        pool_sizes: List of pool sizes to test
+        n_components_list: List of PCA component counts to test
+        top_k_values: List of k values for top-k accuracy
+        cache_dir: Directory to cache training features
+        test_cache_dir: Directory to cache test features
+        device: TensorFlow device to use
+
+    Returns:
+        Dict mapping config name to accuracy results
+    """
+    if top_k_values is None:
+        top_k_values = [1, 3, 5, 10]
+
+    configure_tensorflow(device=device)
+
+    accuracies = {}
+
+    for layer_name in layer_names:
+        for pool_size in pool_sizes:
+            for n_components in n_components_list:
+                config_name = f"{layer_name}_pool_{pool_size}_pca_{n_components}"
+                print_with_padding(f"Tuning: {config_name}")
+
+                model = ElephantIdentifier(
+                    layer_name=layer_name,
+                    pool_size=pool_size,
+                    n_components=n_components
+                )
+
+                model.fit(
+                    train_df,
+                    class_mapping,
+                    cache_dir=cache_dir,
+                    force=False
+                )
+
+                results = model.evaluate(
+                    test_df,
+                    top_k_values=top_k_values,
+                    cache_dir=test_cache_dir,
+                    force=False
+                )
+
+                accuracies[config_name] = results
+
+                for k, metrics in results.items():
+                    logger.info(f"  {k}: {metrics['accuracy']:.3f}")
+
+    return accuracies
+
+
+def print_results_table(accuracies: dict) -> None:
+    """Print tuning results as a formatted table."""
+    print_with_padding("Tuning Results")
+    
+    header = f"| {'Test Name':<35} | {'Top 1':<20} | {'Top 3':<20} | {'Top 5':<20} | {'Top 10':<20} |"
+    print(header)
+    print(f"| {'-'*35} | {'-'*20} | {'-'*20} | {'-'*20} | {'-'*20} |")
+
+    for test_name, test_accuracies in accuracies.items():
+        row = f"| {test_name:<35} | "
+        for key in ['top_1', 'top_3', 'top_5', 'top_10']:
+            if key in test_accuracies:
+                acc = test_accuracies[key]
+                row += f"{acc['accuracy']*100:.1f}% ({acc['correct']}/{acc['total']}) | "
+            else:
+                row += f"{'N/A':<20} | "
+        print(row)
+
+    print_with_padding("")
+
+    compact_header = f"| {'Test Name':<35} | {'Top 1':<10} | {'Top 3':<10} | {'Top 5':<10} | {'Top 10':<10} |"
+    print(compact_header)
+    print(f"| {'-'*35} | {'-'*10} | {'-'*10} | {'-'*10} | {'-'*10} |")
+
+    for test_name, test_accuracies in accuracies.items():
+        row = f"| {test_name:<35} | "
+        for key in ['top_1', 'top_3', 'top_5', 'top_10']:
+            if key in test_accuracies:
+                acc = test_accuracies[key]
+                row += f"{acc['accuracy']*100:.1f}%      | "
+            else:
+                row += f"{'N/A':<10} | "
+        print(row)
+
+    print_with_padding("")
+
+
+if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Tune the ResNet50 model for elephant identification'
     )
     parser.add_argument(
-        '--optimal', 
-        type=bool,
+        '--optimal',
+        action='store_true',
         help='Use the optimal layer and pool size'
     )
+    parser.add_argument(
+        '--train-csv',
+        type=str,
+        default='dataset/train.csv',
+        help='Path to training CSV'
+    )
+    parser.add_argument(
+        '--test-csv',
+        type=str,
+        default='dataset/test.csv',
+        help='Path to test CSV'
+    )
+    parser.add_argument(
+        '--class-mapping',
+        type=str,
+        default='dataset/class_mapping.json',
+        help='Path to class mapping JSON'
+    )
+    parser.add_argument(
+        '--device',
+        type=str,
+        choices=['auto', 'CPU', 'CUDA', 'MPS'],
+        default='auto',
+        help='TensorFlow device to use'
+    )
+    parser.add_argument(
+        '--output-json',
+        type=str,
+        default=None,
+        help='Optional path to save results as JSON'
+    )
+
     args = parser.parse_args()
+
     if args.optimal:
         all_layer_names = ["conv4_block6_out"]
         all_pool_sizes = [6]
@@ -20,49 +179,38 @@ if __name__ == "__main__":
     else:
         all_layer_names = [
             "conv3_block4_2_relu",
-            #"conv4_block6_2_relu",
-            "conv4_block6_out", # 40th activation layer
-            "conv5_block1_out", # 43rd activation layer
-            #"conv5_block3_2_relu"
+            "conv4_block6_out",
+            "conv5_block1_out",
         ]
         all_pool_sizes = [1, 2, 4, 6]
-        all_n_components = [10000] # Higher than needed for max possible PCA components
+        all_n_components = [10000]
 
-    accuracies = {}
-    for layer_name in all_layer_names:
-        for pool_size in all_pool_sizes:
-            for n_components in all_n_components:
-                print_with_padding(f"Tuning: ResNet50 until {layer_name} - Pool size {pool_size} - {n_components} PCA components")
-                accuracies[f"{layer_name}_pool_{pool_size}_pca_{n_components}"] = run_and_evaluate(
-                    force_features=False,
-                    force_pca=False,
-                    force_svm=False,
-                    batch_size=None,
-                    layer_name=layer_name,
-                    n_components=n_components,
-                    pool_size=pool_size,
-                    top_k_values=[1, 3, 5, 10]
-                )
-    # Print as table with row for each test and column for each top_k
-    print_with_padding("Tuning Results")
-    print(f"| {'Test Name':<35} | {'Top 1':<20} | {'Top 3':<20} | {'Top 5':<20} | {'Top 10':<20} |")
-    print(f"| {'-'*35} | {'-'*20} | {'-'*20} | {'-'*20} | {'-'*20} |")
-    
-    for test_name, test_accuracies in accuracies.items():
-        print(f"| {test_name:<35} | ", end="")
-        for _, accuracy in test_accuracies.items():
-            print(f"{accuracy["accuracy"]*100:.1f}% ({accuracy["correct"]}/{accuracy["total"]})      | ", end="")
-        print()
+    logger.info("Loading training data...")
+    train_df = pd.read_csv(args.train_csv)
+    logger.info(f"Loaded {len(train_df)} training samples")
 
-    print_with_padding("")
-    
-    print(f"| {'Test Name':<35} | {'Top 1':<10} | {'Top 3':<10} | {'Top 5':<10} | {'Top 10':<10} |")
-    print(f"| {'-'*35} | {'-'*10} | {'-'*10} | {'-'*10} | {'-'*10} |")
-    
-    for test_name, test_accuracies in accuracies.items():
-        print(f"| {test_name:<35} | ", end="")
-        for _, accuracy in test_accuracies.items():
-            print(f"{accuracy["accuracy"]*100:.1f}%      | ", end="")
-        print()
+    logger.info("Loading test data...")
+    test_df = pd.read_csv(args.test_csv)
+    logger.info(f"Loaded {len(test_df)} test samples")
 
-    print_with_padding("")
+    logger.info("Loading class mapping...")
+    with open(args.class_mapping, 'r') as f:
+        class_mapping = json.load(f)
+    logger.info(f"Loaded {len(class_mapping)} class mappings")
+
+    accuracies = run_tuning(
+        train_df=train_df,
+        test_df=test_df,
+        class_mapping=class_mapping,
+        layer_names=all_layer_names,
+        pool_sizes=all_pool_sizes,
+        n_components_list=all_n_components,
+        device=args.device
+    )
+
+    print_results_table(accuracies)
+
+    if args.output_json:
+        with open(args.output_json, 'w') as f:
+            json.dump(accuracies, f, indent=2)
+        logger.info(f"Results saved to {args.output_json}")
