@@ -320,7 +320,7 @@ names = data['name'].unique()
 random.seed(42)
 random.shuffle(names)
 class_mapping = {name: i for i, name in enumerate(names)}
-with open(f"{root_dir}/dataset/class_mapping.json", "w") as f:
+with open(f"{root_dir}/dataset/appearance_metadata/class_mapping.json", "w") as f:
     json.dump(class_mapping, f, indent=4)
 
 try:
@@ -348,16 +348,16 @@ try:
     
     # Step 3: Save the datasets
     print(f"\nStep 3: Saving datasets...")
-    print(f"Writing train.csv to: {root_dir}/dataset/train.csv")
-    print(f"Writing test.csv to: {root_dir}/dataset/test.csv")
-    
-    train_data_augmented.to_csv(f"{root_dir}/dataset/train.csv", index=False)
-    test_data.to_csv(f"{root_dir}/dataset/test.csv", index=False)
+    print(f"Writing train.csv to: {root_dir}/dataset/appearance_metadata/train.csv")
+    print(f"Writing test.csv to: {root_dir}/dataset/appearance_metadata/test.csv")
+
+    train_data_augmented.to_csv(f"{root_dir}/dataset/appearance_metadata/train.csv", index=False)
+    test_data.to_csv(f"{root_dir}/dataset/appearance_metadata/test.csv", index=False)
     
     # Step 4: Verification
     print(f"\nStep 4: Verification...")
-    written_train_df = pd.read_csv(f"{root_dir}/dataset/train.csv")
-    written_test_df = pd.read_csv(f"{root_dir}/dataset/test.csv")
+    written_train_df = pd.read_csv(f"{root_dir}/dataset/appearance_metadata/train.csv")
+    written_test_df = pd.read_csv(f"{root_dir}/dataset/appearance_metadata/test.csv")
     
     print(f"Verified train.csv: {len(written_train_df)} images")
     print(f"Verified test.csv: {len(written_test_df)} images")

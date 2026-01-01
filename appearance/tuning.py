@@ -139,19 +139,19 @@ if __name__ == '__main__':
     parser.add_argument(
         '--train-csv',
         type=str,
-        default='dataset/train.csv',
+        default='dataset/appearance_metadata/train.csv',
         help='Path to training CSV'
     )
     parser.add_argument(
         '--test-csv',
         type=str,
-        default='dataset/test.csv',
+        default='dataset/appearance_metadata/test.csv',
         help='Path to test CSV'
     )
     parser.add_argument(
         '--class-mapping',
         type=str,
-        default='dataset/class_mapping.json',
+        default='dataset/appearance_metadata/class_mapping.json',
         help='Path to class mapping JSON'
     )
     parser.add_argument(

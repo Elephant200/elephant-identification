@@ -688,11 +688,11 @@ def run_and_evaluate(
     # Load training data
     try:
         root_dir = "/Users/kayoko/Documents/GitHub/elephant-identification"
-        train_data = pd.read_csv(f"{root_dir}/dataset/train.csv")
+        train_data = pd.read_csv(f"{root_dir}/dataset/appearance_metadata/train.csv")
         logger.info(f"Loaded {len(train_data)} training samples")
 
         # Load class mapping
-        with open('dataset/class_mapping.json', 'r') as f:
+        with open('dataset/appearance_metadata/class_mapping.json', 'r') as f:
             class_mapping = json.load(f)
         logger.info(f"Loaded class mapping for {len(class_mapping)} elephants")
 
@@ -709,7 +709,7 @@ def run_and_evaluate(
         )
 
         # Load test data and evaluate
-        test_data = pd.read_csv(f"{root_dir}/dataset/test.csv")
+        test_data = pd.read_csv(f"{root_dir}/dataset/appearance_metadata/test.csv")
         logger.info(f"Loaded {len(test_data)} test samples")
 
         # Evaluate on test set with batch optimization
