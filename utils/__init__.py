@@ -13,6 +13,9 @@ from .contours import draw_contours, resample_polyline, resample2d, resample1d
 # Result utilities
 from .results import combine_results
 
+# Detection utilities
+from .get_bbox import get_bbox
+
 # Make all functions available at package level for backward compatibility
 __all__ = [
     'pad_with_char', 
@@ -30,4 +33,5 @@ __all__ = [
     'resample2d',
     'resample1d',
     'combine_results',
+    'get_bbox',
 ]
