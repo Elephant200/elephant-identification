@@ -71,9 +71,6 @@ def draw_contours(
         draw_points (bool): Whether to explicilty the points on the contours.
         point_color (tuple[int, int, int]): The color to draw the points in.
         point_radius (int): The radius of the points.
-
-    Returns:
-        np.ndarray: The image with the contours drawn on it.
     """
     if len(contours) > 0 and isinstance(contours[0], dict):
         contours = [np.array(contour["points"]) for contour in contours]
