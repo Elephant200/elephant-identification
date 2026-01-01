@@ -9,8 +9,8 @@ from inference import get_model
 import supervision as sv
 from tqdm import tqdm
 
-from boxing.get_prediction import get_prediction
-from dataset_creation.process import classify_image
+from utils.get_bbox import get_bbox
+from data_prep.classify_and_crop import classify_image
 from utils import (
     get_files_from_dir,
     get_int,
@@ -200,7 +200,7 @@ while True:
         overlay = image.copy()
 
         for model, (box_annotator, label_annotator), version in zip(models, annotators, model_versions):
-            detections = get_prediction(model, image_path)
+            detections = get_bbox(model, image_path)
             classification = classify_image(detections)
             detection = [d for d in detections]
             print(detections.xyxy)

@@ -11,7 +11,7 @@ import cv2
 from tqdm import tqdm
 from typing import Literal
 
-from boxing.get_prediction import get_prediction
+from utils.get_bbox import get_bbox
 from utils import print_with_padding, is_image, clear, get_all_images
 
 project_id = "elephant-identification-research"
@@ -229,7 +229,7 @@ if __name__ == "__main__":
       image = os.path.basename(image_path)
       if not is_image(image_path):
         continue
-      detections = get_prediction(model, image_path)
+      detections = get_bbox(model, image_path)
       classification = classify_image(detections)
 
       process_and_copy_image(
