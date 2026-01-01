@@ -4,6 +4,14 @@ import os
 import cv2
 from tqdm import tqdm
 from curvrank.contour import get_contour
+from dotenv import load_dotenv
+from inference_sdk import InferenceHTTPClient
+import supervision as sv
+from pycocotools import mask as mask_util
+
+from utils import get_list_of_files
+
+load_dotenv()
 
 def clamp(x, lower, upper):
     """Equivalent to max(lower, min(x, upper))"""
@@ -12,12 +20,72 @@ def clamp(x, lower, upper):
 TARGET_SIZE = 432
 PADDING = 0.10 # 10% padding around the initial contour
 
+CLIENT = InferenceHTTPClient(
+    api_url="https://serverless.roboflow.com",
+    api_key=os.getenv("ROBOFLOW_API_KEY")
+)
+
 def remove_background(image: np.ndarray) -> np.ndarray:
     """
     Remove the background from the image using SAM3
     """
+    body_preds = CLIENT.run_workflow(
+        workspace_name="elephantidentificationresearch",
+        workflow_id="sam3-with-prompts",
+        images={
+            "image": image
+        },
+        parameters={
+            "prompts": "elephant"
+        },
+        use_cache=True
+    )
+    body_preds = body_preds[0]["sam"]["predictions"]
 
-    return image
+    tusk_preds = CLIENT.run_workflow(
+        workspace_name="elephantidentificationresearch",
+        workflow_id="sam3-with-prompts",
+        images={
+            "image": image
+        },
+        parameters={
+            "prompts": "tusk"
+        },
+        use_cache=True
+    )
+    tusk_preds = tusk_preds[0]["sam"]["predictions"]
+
+    def process_pred(pred: dict) -> dict:
+        return {
+            **pred,
+            "mask": mask_util.decode(pred["rle_mask"])
+        }
+
+    body_preds = [process_pred(pred) for pred in body_preds]
+    tusk_preds = [process_pred(pred) for pred in tusk_preds]
+
+    # For each body prediction, find overlapping tusks and merge them into the body mask
+    for body_pred in body_preds:
+        body_mask = body_pred["mask"]
+        for tusk_pred in tusk_preds:
+            tusk_mask = tusk_pred["mask"]
+            overlap = np.logical_and(body_mask, tusk_mask).sum()
+            if overlap > 0:
+                body_pred["mask"] = np.logical_or(body_mask, tusk_mask).astype(np.uint8)
+                body_mask = body_pred["mask"]
+
+    # Combine all body masks into a single mask
+    if body_preds:
+        combined_mask = body_preds[0]["mask"].copy()
+        for body_pred in body_preds[1:]:
+            combined_mask = np.logical_or(combined_mask, body_pred["mask"])
+        combined_mask = combined_mask.astype(np.uint8)
+    else:
+        combined_mask = np.ones((image.shape[0], image.shape[1]), dtype=np.uint8)
+
+    # Apply mask to image (set background to black)
+    result = cv2.bitwise_and(image, image, mask=combined_mask)
+    return result
 
 def preprocess_images(image_paths: list[str], output_dir: str = "curvrank/preprocessed", force: bool = False) -> tuple[list[str], list[Literal["left", "right"]], list[str]]:
     """
@@ -106,3 +174,13 @@ def get_contours(image_paths: list[str], force: bool = False):
             continue
         contours.extend(contours)
     return contours
+
+if __name__ == "__main__":
+    for image in get_list_of_files("Enter the path to the images to preprocess: "):
+        image = cv2.imread(image)
+        image = remove_background(image)
+        cv2.imshow("image", image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+    #preprocess_images([image], output_dir="curvrank/preprocessed")
