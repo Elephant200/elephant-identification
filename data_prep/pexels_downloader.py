@@ -1,47 +1,139 @@
+import argparse
 import os
-import requests
-from typing import Literal
-from dotenv import load_dotenv
-from pprint import pprint
-from tqdm import tqdm
 import re
+import time
+from dataclasses import dataclass
+from typing import Any, Iterable, Literal
 
-load_dotenv()
+import requests
+from dotenv import load_dotenv
+from tqdm import tqdm
 
-API_KEY = os.environ["PEXELS_API_KEY"]
+PexelsImageSize = Literal["tiny", "small", "medium", "large", "large2x"]
+MAX_PER_PAGE = 80
 
-def search(query: str, *, image_count: int = 15, size: Literal["tiny", "small", "medium", "large", "large2x"] = "small") -> list[str]:
+
+@dataclass(frozen=True)
+class PexelsPhoto:
+    id: int
+    url: str
+
+
+def _get_api_key(api_key: str | None) -> str:
+    if api_key:
+        return api_key
+    env_key = os.getenv("PEXELS_API_KEY")
+    if env_key:
+        return env_key
+    raise RuntimeError(
+        "Missing Pexels API key. Set environment variable PEXELS_API_KEY (or pass --api-key)."
+    )
+
+
+def _make_session(api_key: str) -> requests.Session:
+    session = requests.Session()
+    session.headers.update({"Authorization": api_key})
+    return session
+
+
+def _request_json(
+    session: requests.Session,
+    url: str,
+    *,
+    params: dict[str, Any] | None = None,
+    timeout_s: float = 30.0,
+    max_retries: int = 8,
+) -> dict[str, Any]:
+    backoff_s = 1.0
+    for attempt in range(max_retries):
+        try:
+            resp = session.get(url, params=params, timeout=timeout_s)
+        except requests.RequestException:
+            if attempt == max_retries - 1:
+                raise
+            time.sleep(backoff_s)
+            backoff_s = min(backoff_s * 2.0, 30.0)
+            continue
+
+        if resp.status_code == 429:
+            retry_after = resp.headers.get("Retry-After")
+            sleep_s = float(retry_after) if retry_after and retry_after.isdigit() else backoff_s
+            time.sleep(min(max(sleep_s, 1.0), 60.0))
+            backoff_s = min(backoff_s * 2.0, 30.0)
+            continue
+
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, dict):
+            raise RuntimeError(f"Unexpected response shape: {type(data)}")
+        return data
+
+    raise RuntimeError("Failed to fetch JSON from Pexels after retries.")
+
+
+def iter_search_photos(
+    query: str,
+    *,
+    image_count: int,
+    size: PexelsImageSize,
+    session: requests.Session,
+    per_page: int = MAX_PER_PAGE,
+) -> Iterable[PexelsPhoto]:
+    """
+    Yield Pexels photos for a query, paginating until image_count photos are produced.
+    """
+    produced = 0
+    page = 1
+    while produced < image_count:
+        data = _request_json(
+            session,
+            "https://api.pexels.com/v1/search",
+            params={"query": query, "page": page, "per_page": per_page},
+        )
+        photos = data.get("photos", [])
+        if not isinstance(photos, list) or not photos:
+            return
+
+        for photo in photos:
+            if produced >= image_count:
+                return
+            if not isinstance(photo, dict):
+                continue
+            photo_id = photo.get("id")
+            src = photo.get("src")
+            if not isinstance(photo_id, int) or not isinstance(src, dict):
+                continue
+            url = src.get(size)
+            if not isinstance(url, str) or not url:
+                continue
+            produced += 1
+            yield PexelsPhoto(id=photo_id, url=url)
+
+        page += 1
+
+
+def search(
+    query: str, *, image_count: int = 15, size: PexelsImageSize = "small", api_key: str | None = None
+) -> list[str]:
     """
     Search for images on Pexels
 
     Args:
         query (str): The query to search for.
         image_count (int): The number of images to return.
-        size (Literal["tiny", "small", "medium", "large", "large2x"]): The size of images to return. Options are tiny, small, medium, large, and large2x.
+        size (Literal["tiny", "small", "medium", "large", "large2x"]): The size of images to return.
+        api_key (str | None): Optional Pexels API key override.
 
     Returns:
         list[str]: A list of image URLs.
     """
-    MAX_PER_PAGE = 80
-    
-    page = 1
-    images: list[str] = []
+    session = _make_session(_get_api_key(api_key))
+    return [p.url for p in iter_search_photos(query, image_count=image_count, size=size, session=session)]
 
-    while len(images) < image_count:
-        url = f"https://api.pexels.com/v1/search?query={query}&page={page}&per_page={MAX_PER_PAGE}"
-        headers = {"Authorization": API_KEY}
-        try:
-            response = requests.get(url, headers=headers).json()
-        except Exception as e:
-            print(f"Error getting images: {e}")
-            break
 
-        images.extend([photo["src"][size] for photo in response["photos"]])
-        page += 1
-    
-    return images[:image_count]
-
-def get_photo_by_id(photo_id: int, *, size: Literal["tiny", "small", "medium", "large", "large2x"] = "small") -> str | None:
+def get_photo_by_id(
+    photo_id: int, *, size: PexelsImageSize = "small", api_key: str | None = None
+) -> str | None:
     """
     Get a specific photo by its ID from Pexels.
 
@@ -52,17 +144,23 @@ def get_photo_by_id(photo_id: int, *, size: Literal["tiny", "small", "medium", "
     Returns:
         str | None: The image URL if found, None otherwise.
     """
-    url = f"https://api.pexels.com/v1/photos/{photo_id}"
-    headers = {"Authorization": API_KEY}
-    
     try:
-        response = requests.get(url, headers=headers).json()
-        return response["src"][size]
+        session = _make_session(_get_api_key(api_key))
+        response = _request_json(session, f"https://api.pexels.com/v1/photos/{photo_id}")
+        src = response.get("src", {})
+        if isinstance(src, dict):
+            url = src.get(size)
+            if isinstance(url, str):
+                return url
+        return None
     except Exception as e:
         print(f"Error getting photo {photo_id}: {e}")
         return None
 
-def redownload_existing_images_large(output_dir: str = "elephant_head_training") -> None:
+
+def redownload_existing_images_large(
+    output_dir: str = "elephant_head_training", *, api_key: str | None = None
+) -> None:
     """
     Redownload existing images in the directory in large size.
 
@@ -96,17 +194,19 @@ def redownload_existing_images_large(output_dir: str = "elephant_head_training")
     print(f"Extracted {len(photo_ids)} photo IDs")
 
     # Download each photo in large size
+    session = _make_session(_get_api_key(api_key))
     downloaded_count = 0
     for photo_id in tqdm(photo_ids, desc="Redownloading images in large size"):
         try:
-            image_url = get_photo_by_id(photo_id, size="large")
+            image_url = get_photo_by_id(photo_id, size="large", api_key=_get_api_key(api_key))
             if image_url:
                 # Create new filename with large size
                 filename = f"pexels-photo-{photo_id}-large.jpeg"
                 filepath = os.path.join(output_dir, filename)
                 
                 # Download the image
-                response = requests.get(image_url)
+                response = session.get(image_url, timeout=60)
+                response.raise_for_status()
                 with open(filepath, "wb") as f:
                     f.write(response.content)
                 
@@ -119,7 +219,30 @@ def redownload_existing_images_large(output_dir: str = "elephant_head_training")
 
     print(f"Successfully downloaded {downloaded_count} images in large size")
 
-def download_images(query: str, output_dir: str = "elephant_head_training", *, image_count: int = 15, size: Literal["tiny", "small", "medium", "large", "large2x"] = "small") -> None:
+
+def _safe_filename(photo_id: int, size: str) -> str:
+    return f"pexels-photo-{photo_id}-{size}.jpg"
+
+
+def _download_streaming(session: requests.Session, url: str, dest_path: str) -> None:
+    tmp_path = dest_path + ".part"
+    resp = session.get(url, stream=True, timeout=120)
+    resp.raise_for_status()
+    with open(tmp_path, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=1024 * 256):
+            if chunk:
+                f.write(chunk)
+    os.replace(tmp_path, dest_path)
+
+
+def download_images(
+    query: str,
+    output_dir: str = "elephant_head_training",
+    *,
+    image_count: int = 15,
+    size: PexelsImageSize = "small",
+    api_key: str | None = None,
+) -> None:
     """
     Download images from Pexels and save them to a local directory.
 
@@ -132,31 +255,34 @@ def download_images(query: str, output_dir: str = "elephant_head_training", *, i
     Returns:
         None
     """
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
+    session = _make_session(_get_api_key(api_key))
 
-    images = search(query, image_count=image_count, size=size)
-    print(len(images))
+    downloaded = 0
+    skipped = 0
+    failed = 0
 
-
-    downloaded_images = 0
-    for image in tqdm(images, desc="Downloading images"):
+    photos = iter_search_photos(query, image_count=image_count, size=size, session=session)
+    for photo in tqdm(photos, total=image_count, desc=f"Downloading ({size})"):
+        filename = _safe_filename(photo.id, size)
+        dest_path = os.path.join(output_dir, filename)
+        if os.path.exists(dest_path):
+            skipped += 1
+            continue
         try:
-            filename = image.split("/")[-1].split("?")[0]
-            downloaded_images += 1
-
-            if os.path.exists(os.path.join(output_dir, filename)):
-                print(f"Image {filename} already exists")
-                continue
-
-            response = requests.get(image)
-            with open(os.path.join(output_dir, filename), "wb") as f:
-                f.write(response.content)
-
+            _download_streaming(session, photo.url, dest_path)
+            downloaded += 1
         except Exception as e:
-            print(f"Error downloading image {filename}:\n{e}")
-        
-    print(f"Downloaded {downloaded_images} images")
+            failed += 1
+            try:
+                part_path = dest_path + ".part"
+                if os.path.exists(part_path):
+                    os.remove(part_path)
+            except Exception:
+                pass
+            print(f"Error downloading {photo.id}: {e}")
+
+    print(f"Done. downloaded={downloaded} skipped={skipped} failed={failed} output_dir={output_dir}")
 
 def clear_images(output_dir: str = "elephant_head_training") -> None:
     """
@@ -207,9 +333,25 @@ def delete_non_large_images(output_dir: str = "elephant_head_training") -> None:
 
     print(f"Successfully deleted {deleted_count} non-large images")
 
-# Redownload existing images in large size
-#redownload_existing_images_large("elephant_head_training")
 
-# Delete all non-large images
-delete_non_large_images("elephant_head_training")
+def main(argv: list[str] | None = None) -> None:
+    load_dotenv()
+    parser = argparse.ArgumentParser(description="Download images from Pexels.")
+    parser.add_argument("--query", default="African elephant")
+    parser.add_argument("--size", default="large", choices=["tiny", "small", "medium", "large", "large2x"])
+    parser.add_argument("--count", type=int, default=2000)
+    parser.add_argument("--output-dir", default="images/pexels_elephants")
+    parser.add_argument("--api-key", default=None, help="Optional Pexels API key override.")
+    args = parser.parse_args(argv)
 
+    download_images(
+        args.query,
+        args.output_dir,
+        image_count=args.count,
+        size=args.size,
+        api_key=args.api_key,
+    )
+
+
+if __name__ == "__main__":
+    main()
