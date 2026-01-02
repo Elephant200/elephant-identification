@@ -19,7 +19,7 @@ def reorient(points, theta, center):
     points_trans = points_trans.transpose()[:, :2]
     points_trans += center
 
-    assert points_trans.ndim == 2, 'points_trans.ndim == %d != 2' % (points_trans.ndim)
+    assert points_trans.ndim == 2, f'points_trans.ndim == {points_trans.ndim} != 2'
 
     return points_trans
 

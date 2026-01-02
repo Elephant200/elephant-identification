@@ -87,7 +87,11 @@ def remove_background(image: np.ndarray) -> np.ndarray:
     result = cv2.bitwise_and(image, image, mask=combined_mask)
     return result
 
-def preprocess_images(image_paths: list[str], output_dir: str = "curvrank/preprocessed", force: bool = False) -> tuple[list[str], list[Literal["left", "right"]], list[str]]:
+def preprocess_images(
+        image_paths: list[str],
+        output_dir: str = "curvrank/preprocessed",
+        force: bool = False
+    ) -> tuple[list[str], list[Literal["left", "right"]], list[str]]:
     """
     Preprocess the images to prepare for contour extraction, descriptor calculation, and LNBNN matching.
     For every image, split it into different images, one for each ear. Return the list of images, the views, and the names corresponding to these new images of the ears. Each image is resized to 432x432 for rf-detr inference.
