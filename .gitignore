@@ -9,7 +9,7 @@ dataset/
 
 __pycache__/
 
-train_cache/
-test_cache/
+.cache/
+*.pkl
 
 processing/
