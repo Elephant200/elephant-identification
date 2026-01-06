@@ -68,7 +68,7 @@ def lnbnn_identify(
     unique_names = np.unique(names)
     scores = {name: 0.0 for name in unique_names}
     
-    for descriptor in tqdm(descriptors, desc="Querying"):
+    for descriptor in descriptors:
         ind, dist = index.get_nns_by_vector(
             descriptor, k + 1, search_k=search_k, include_distances=True
         )

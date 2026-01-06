@@ -89,7 +89,7 @@ def remove_background(image: np.ndarray) -> np.ndarray:
 
 def preprocess_images(
         image_paths: list[str],
-        output_dir: str = "curvrank/preprocessed",
+        output_dir: str = "dataset/curvrank_ears",
         force: bool = False
     ) -> tuple[list[str], list[Literal["left", "right"]], list[str]]:
     """
@@ -180,11 +180,56 @@ def get_contours(image_paths: list[str], force: bool = False):
     return all_contours
 
 if __name__ == "__main__":
-    for image in get_list_of_files("Enter the path to the images to preprocess: "):
-        image = cv2.imread(image)
-        image = remove_background(image)
-        cv2.imshow("image", image)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+    import argparse
 
-    #preprocess_images([image], output_dir="curvrank/preprocessed")
+    parser = argparse.ArgumentParser(
+        description='Preprocess elephant images for curvrank identification'
+    )
+    parser.add_argument(
+        '--input-dir',
+        type=str,
+        help='Directory containing raw elephant images'
+    )
+    parser.add_argument(
+        '--input-csv',
+        type=str,
+        help='CSV file with filepath column containing image paths'
+    )
+    parser.add_argument(
+        '--output-dir',
+        type=str,
+        default='dataset/curvrank_ears',
+        help='Directory to save preprocessed ear images (default: dataset/curvrank_ears)'
+    )
+    parser.add_argument(
+        '--force',
+        action='store_true',
+        help='Force reprocessing of existing images'
+    )
+
+    args = parser.parse_args()
+
+    if not args.input_dir and not args.input_csv:
+        parser.error("Must specify either --input-dir or --input-csv")
+
+    image_paths = []
+    if args.input_dir:
+        from utils import get_all_images
+        image_paths = get_all_images(args.input_dir)
+        print(f"Found {len(image_paths)} images in {args.input_dir}")
+    elif args.input_csv:
+        import pandas as pd
+        df = pd.read_csv(args.input_csv)
+        image_paths = df['filepath'].tolist()
+        print(f"Found {len(image_paths)} images in {args.input_csv}")
+
+    out_paths, out_views, out_names = preprocess_images(
+        image_paths,
+        output_dir=args.output_dir,
+        force=args.force
+    )
+
+    print(f"Preprocessed {len(out_paths)} ear images")
+    print(f"  Left ears: {out_views.count('left')}")
+    print(f"  Right ears: {out_views.count('right')}")
+    print(f"Saved to: {args.output_dir}")

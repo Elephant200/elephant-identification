@@ -1,6 +1,7 @@
 """
 Code to extract contours from images. The most important function is get_contour, which returns the contours and views for an image.
 """
+import json
 import os
 from pprint import pprint
 from typing import Literal
@@ -8,6 +9,7 @@ import numpy as np
 import cv2
 from inference_sdk import InferenceHTTPClient, InferenceConfiguration
 from dotenv import load_dotenv
+from tqdm import tqdm
 
 from utils import resample_polyline, get_files_from_dir
 
@@ -24,7 +26,7 @@ CONTOUR_CLIENT = InferenceHTTPClient(
 )
 CONTOUR_CLIENT.configure(InferenceConfiguration(
     confidence_threshold=0.25,
-    iou_threshold=0.05
+    iou_threshold=0.25
 ))
 CONTOUR_MODEL_URL = "curvrank-contours-zddtc/6"
 
@@ -36,7 +38,42 @@ ANCHOR_CLIENT.configure(InferenceConfiguration(
     confidence_threshold=0.05,
     iou_threshold=0.05
 ))
-ANCHOR_MODEL_URL = "anchor-extraction-bwwlq/4"
+ANCHOR_MODEL_URL = "anchor-extraction-bwwlq/5"
+
+
+def get_cache_path(image_path: str) -> str:
+    """Convert image path to cache JSON path in sibling _output directory."""
+    directory = os.path.dirname(image_path)
+    filename = os.path.basename(image_path)
+    name_without_ext = os.path.splitext(filename)[0]
+    output_dir = directory + "_output"
+    return os.path.join(output_dir, name_without_ext + ".json")
+
+
+def load_cached_contour(cache_path: str) -> tuple[list[np.ndarray], list[Literal["left", "right"]]] | None:
+    """Load contours and views from cache if exists."""
+    if not os.path.exists(cache_path):
+        return None
+    try:
+        with open(cache_path, "r") as f:
+            data = json.load(f)
+        contours = [np.array(c, dtype=np.int32) for c in data["contours"]]
+        views = data["views"]
+        return contours, views
+    except (json.JSONDecodeError, KeyError, ValueError):
+        return None
+
+
+def save_contour_to_cache(cache_path: str, contours: list[np.ndarray], views: list[Literal["left", "right"]]) -> None:
+    """Save contours and views to cache JSON."""
+    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+    data = {
+        "contours": [c.tolist() for c in contours],
+        "views": views
+    }
+    with open(cache_path, "w") as f:
+        json.dump(data, f)
+
 
 def get_contour_predictions(image_path: str) -> list[dict]:
     """
@@ -137,6 +174,11 @@ def get_contour(image_path: str, view: Literal["side", "front", "auto"] = "auto"
         list[np.ndarray]: The coarse contours for the image. Each is a shape (n, 2) array of contour points.
         list[Literal["left", "right"]]: For each contour, whether it is a left or right ear.
     """
+    cache_path = get_cache_path(image_path)
+    cached = load_cached_contour(cache_path)
+    if cached is not None:
+        return cached
+
     raw_predictions = get_contour_predictions(image_path)
     anchor_point_predictions = get_anchor_points(image_path)
     
@@ -181,8 +223,10 @@ def get_contour(image_path: str, view: Literal["side", "front", "auto"] = "auto"
     # Cut contours by anchor points
     contours, views = cut_contours_by_anchors(contours, anchor_point_predictions)
 
-    # Convert to lists of tuples
-    return [orient_contour(contour) for contour in contours], views
+    result = [orient_contour(contour) for contour in contours]
+    save_contour_to_cache(cache_path, result, views)
+    return result, views
+
 
 def orient_contour(contour: np.ndarray) -> np.ndarray:
     """
@@ -212,15 +256,17 @@ def visualize_contour(image_path: str):
         image=image,
         contours=predictions,
         color=(255, 0, 0),
-        thickness=2,
-        draw_points=True
+        thickness=1,
+        draw_points=True,
+        point_color=(255, 0, 0),
+        point_radius=1
     )
     for pair in anchor_points:
         for anchor_point in pair["points"]:
             cv2.circle(
                 img=image,
                 center=anchor_point,
-                radius=10,
+                radius=5,
                 color=(0, 0, 255),
                 thickness=-1
             )
@@ -236,8 +282,10 @@ def visualize_contour(image_path: str):
         image=image,
         contours=predictions,
         color=(0, 255, 0),
-        thickness=2,
-        draw_points=True
+        thickness=1,
+        draw_points=True,
+        point_color=(255, 0, 0),
+        point_radius=1
     )
 
     for contour in predictions:
@@ -249,7 +297,7 @@ def visualize_contour(image_path: str):
     cv2.destroyAllWindows()
 
 
-def save_contour_for_image(image_path: str):
+def save_contour_for_image(image_path: str, output_dir: str):
     predictions, _ = get_contour(image_path)
 
     image = cv2.imread(image_path)
@@ -258,15 +306,19 @@ def save_contour_for_image(image_path: str):
         image=image,
         contours=predictions,
         color=(0, 255, 0),
-        thickness=2,
-        draw_points=True
+        thickness=1,
+        draw_points=True,
+        point_color=(255, 0, 0),
+        point_radius=1
     )
 
     for contour in predictions: # Line from white to blue
         cv2.circle(image, contour[0], 10, (255, 255, 255), -1)
         cv2.circle(image, contour[-1], 10, (255, 0, 0), -1)
 
-    cv2.imwrite(f"dataset/tough-output/{image_path.split('/')[-1].split('.')[0]}_contour.jpg", image)
+    cv2.imwrite(os.path.join(output_dir, f"{image_path.split('/')[-1].split('.')[0]}_contour.jpg"), image)
+    with open(os.path.join(output_dir, f"{image_path.split('/')[-1].split('.')[0]}_contour.json"), "w") as f:
+        json.dump([contour.tolist() for contour in predictions], f)
 
 if __name__ == "__main__":
     import cv2
@@ -283,13 +335,69 @@ if __name__ == "__main__":
                     print(f"Error visualizing contour for image {arg}\nError Message: {e}")
         sys.exit(0)
     
-    image_paths = get_all_images("curvrank/preprocessed")
-
-    sample_num = int(input("Enter the number of images to sample, 0 for manual input, or -1 for all: "))
-    sample_num = sample_num if sample_num != -1 else len(image_paths)
-    image_paths = random.sample(image_paths, sample_num)
-    if sample_num == 0:
-        image_paths = get_files_from_dir("Please enter the image paths below.")
+    print("Contour Extraction Tool")
+    print("=" * 50)
+    mode = int(input("\nSelect mode:\n[1] Random Sample Visualization\n[2] Visualize All from Directory\n[3] Manual Input Visualization\n[4] Batch Process Directory\n\nEnter mode number: "))
     
-    for image_path in image_paths:
-        visualize_contour(image_path)
+    if mode == 1:
+        input_dir = input("\nEnter directory path (default is 'dataset/ELPephants'): ")
+        if input_dir == "":
+            input_dir = "dataset/ELPephants"
+        sample_num = int(input("Enter number of images to sample: "))
+        
+        image_paths = get_all_images(input_dir)
+        if len(image_paths) == 0:
+            print(f"No images found in {input_dir}")
+            sys.exit(1)
+        
+        if sample_num > len(image_paths):
+            print(f"Warning: Requested {sample_num} images but only {len(image_paths)} available. Using all images.")
+            sample_num = len(image_paths)
+        
+        image_paths = random.sample(image_paths, sample_num)
+        
+        print(f"\nVisualizing {len(image_paths)} image(s)...")
+        for image_path in image_paths:
+            visualize_contour(image_path)
+    
+    elif mode == 2:
+        input_dir = input("\nEnter directory path: ")
+        
+        image_paths = get_all_images(input_dir)
+        if len(image_paths) == 0:
+            print(f"No images found in {input_dir}")
+            sys.exit(1)
+        
+        print(f"\nVisualizing all {len(image_paths)} image(s)...")
+        for image_path in image_paths:
+            visualize_contour(image_path)
+    
+    elif mode == 3:
+        image_paths = get_files_from_dir("Enter image paths:")
+        
+        print(f"\nVisualizing {len(image_paths)} image(s)...")
+        for image_path in image_paths:
+            visualize_contour(image_path)
+    
+    elif mode == 4:
+        input_dir = input("\nEnter input directory path: ")
+        output_dir = input("Enter output directory path: ")
+        
+        image_paths = get_all_images(input_dir)
+        if len(image_paths) == 0:
+            print(f"No images found in {input_dir}")
+            sys.exit(1)
+        
+        os.makedirs(output_dir, exist_ok=True)
+        
+        print(f"\nProcessing {len(image_paths)} image(s) from {input_dir}...")
+
+        for image_path in tqdm(image_paths, desc="Processing images", unit="image"):
+            try:
+                save_contour_for_image(image_path, output_dir)
+            except Exception as e:
+                print(f"Error processing {os.path.basename(image_path)}: {e}")
+        print(f"\nDone! Contours saved to {output_dir}")
+    
+    else:
+        print("Invalid mode selected.")
