@@ -13,3 +13,5 @@ __pycache__/
 *.pkl
 
 processing/
+
+curvrank/_[!_]*
