@@ -1,6 +1,14 @@
-# Elephant Identification Research
+# Elephant Re-Identification using AI
 
-This repository holds code used for research on identifying individual elephants from images. The project explores two complementary approaches to photo-identification: appearance-based deep learning and curvature-based ear recognition.
+## Background
+
+Reliable individual identification is fundamental to elephant conservation. Long-term population monitoring, tracking social dynamics, understanding movement patterns, and measuring the effectiveness of anti-poaching efforts all depend on our ability to recognize specific animals across time and space. Historically, this has meant either invasive tagging methods or manual identification by experts who memorize ear notches, tusk shapes, and vein patterns across hundreds of individuals. Neither scales well.
+
+AI-based photo-identification offers a non-invasive alternative, and the proliferation of camera traps and citizen science platforms has created vast archives of elephant imagery. Manually processing these images remains a bottleneck, but automated AI systems could transform how we conduct population surveys, allowing researchers to focus on analysis rather than laborious image matching.
+
+The challenge is that elephant re-identification is, well, challenging. Unlike human faces or car license plates, elephants are photographed at varying distances, angles, and lighting conditions. They're often partially occluded by vegetation, covered in mud, or photographed in motion. Their appearance changes as they age, accumulate injuries, and lose tusks. Any practical system needs to handle this variability gracefully.
+
+This project explores whether combining two complementary approaches can address these challenges better than either alone. Appearance-based deep learning excels at learning holistic visual patterns but can be sensitive to background clutter and pose variation. Contour-based methods focus on stable morphological features like ear shape, which remain consistent across conditions but require accurate segmentation. By developing both pipelines in parallel, we can evaluate their relative strengths and explore ensemble strategies.
 
 ## Approaches
 
@@ -11,6 +19,8 @@ This repository holds code used for research on identifying individual elephants
 ## Dataset
 
 Both methods are trained and evaluated on the ELPephants dataset (Körschens & Denzler, 2019), a fine-grained dataset designed for elephant re-identification research. Annotations for bounding box detection, keypoint extraction, and segmentation masks were created using Roboflow, with segmentation assisted by SAM3.
+
+**Current limitations**: The images currently available for training are not particularly high-quality, which constrains model performance. Access to larger, higher-resolution datasets from field researchers or conservation organizations would significantly improve accuracy and generalization. If you have access to elephant photos, please get in touch!
 
 ## Directory Structure
 
@@ -23,9 +33,9 @@ Both methods are trained and evaluated on the ELPephants dataset (Körschens & D
 - `utils/` - Shared utilities for bounding boxes, contours, visualization, and file handling
 - `archive/` - Earlier experimental code
 
-## Background
+## Project Status
 
-Wildlife photo-identification helps researchers monitor populations without invasive tagging. While appearance-based deep learning has become dominant in computer vision, contour-based methods have proven effective for species with distinctive edge features. This project explores whether combining both approaches can improve identification accuracy for African elephants, particularly in challenging field conditions.
+This is an active research project. Both identification pipelines are functional but ongoing work focuses on improving robustness, testing ensemble methods, and evaluating performance across different image quality conditions.
 
 ## Acknowledgements
 
