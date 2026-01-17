@@ -1,5 +1,7 @@
 # Elephant Re-Identification using AI
 
+![African Elephant](https://africageographic.com/wp-content/uploads/2020/01/Guest-Dr.jpg)
+
 ## Background
 
 Reliable individual identification is fundamental to elephant conservation. Long-term population monitoring, tracking social dynamics, understanding movement patterns, and measuring the effectiveness of anti-poaching efforts all depend on our ability to recognize specific animals across time and space. Historically, this has meant either invasive tagging methods or manual identification by experts who memorize ear notches, tusk shapes, and vein patterns across hundreds of individuals. Neither scales well.
