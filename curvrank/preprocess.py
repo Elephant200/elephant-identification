@@ -1,108 +1,68 @@
-import numpy as np
-from typing import Literal
-import os
-import cv2
-from tqdm import tqdm
-from curvrank.contour import get_contour
-from dotenv import load_dotenv
-from inference_sdk import InferenceHTTPClient
-import supervision as sv
-from pycocotools import mask as mask_util
+"""Preprocessing pipeline for curvrank-based elephant ear identification.
 
-from utils import get_list_of_files
+Handles ear detection, cropping, and train/test splitting.
+"""
+import argparse
+import logging
+import os
+import random
+from typing import Literal, Tuple
+
+import cv2
+import numpy as np
+import pandas as pd
+from dotenv import load_dotenv
+from tqdm import tqdm
+
+from curvrank.contour import get_contour
+from utils import get_all_images
 
 load_dotenv()
 
-def clamp(x, lower, upper):
-    """Equivalent to max(lower, min(x, upper))"""
-    return max(lower, min(x, upper))
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 TARGET_SIZE = 432
-PADDING = 0.10 # 10% padding around the initial contour
+PADDING = 0.10
 
-CLIENT = InferenceHTTPClient(
-    api_url="https://serverless.roboflow.com",
-    api_key=os.getenv("ROBOFLOW_API_KEY")
-)
 
-def remove_background(image: np.ndarray) -> np.ndarray:
-    """
-    Remove the background from the image using SAM3
-    """
-    body_preds = CLIENT.run_workflow(
-        workspace_name="elephantidentificationresearch",
-        workflow_id="sam3-with-prompts",
-        images={
-            "image": image
-        },
-        parameters={
-            "prompts": "elephant"
-        },
-        use_cache=True
-    )
-    body_preds = body_preds[0]["sam"]["predictions"]
+def clamp(x: int, lower: int, upper: int) -> int:
+    return max(lower, min(x, upper))
 
-    tusk_preds = CLIENT.run_workflow(
-        workspace_name="elephantidentificationresearch",
-        workflow_id="sam3-with-prompts",
-        images={
-            "image": image
-        },
-        parameters={
-            "prompts": "tusk"
-        },
-        use_cache=True
-    )
-    tusk_preds = tusk_preds[0]["sam"]["predictions"]
 
-    def process_pred(pred: dict) -> dict:
-        return {
-            **pred,
-            "mask": mask_util.decode(pred["rle_mask"])
-        }
+def extract_info_from_filename(filepath: str) -> Tuple[str, Literal["left", "right"]]:
+    """Extract elephant ID and view from preprocessed ear filename."""
+    filename = os.path.basename(filepath)
+    elephant_id = filename.split("_")[0]
 
-    body_preds = [process_pred(pred) for pred in body_preds]
-    tusk_preds = [process_pred(pred) for pred in tusk_preds]
-
-    # For each body prediction, find overlapping tusks and merge them into the body mask
-    for body_pred in body_preds:
-        body_mask = body_pred["mask"]
-        for tusk_pred in tusk_preds:
-            tusk_mask = tusk_pred["mask"]
-            overlap = np.logical_and(body_mask, tusk_mask).sum()
-            if overlap > 0:
-                body_pred["mask"] = np.logical_or(body_mask, tusk_mask).astype(np.uint8)
-                body_mask = body_pred["mask"]
-
-    # Combine all body masks into a single mask
-    if body_preds:
-        combined_mask = body_preds[0]["mask"].copy()
-        for body_pred in body_preds[1:]:
-            combined_mask = np.logical_or(combined_mask, body_pred["mask"])
-        combined_mask = combined_mask.astype(np.uint8)
+    if filename.endswith("_left.jpg"):
+        view = "left"
+    elif filename.endswith("_right.jpg"):
+        view = "right"
     else:
-        combined_mask = np.ones((image.shape[0], image.shape[1]), dtype=np.uint8)
+        raise ValueError(f"Cannot determine view from filename: {filename}")
 
-    # Apply mask to image (set background to black)
-    result = cv2.bitwise_and(image, image, mask=combined_mask)
-    return result
+    return elephant_id, view
+
 
 def preprocess_images(
-        image_paths: list[str],
-        output_dir: str = "dataset/curvrank_ears",
-        force: bool = False
-    ) -> tuple[list[str], list[Literal["left", "right"]], list[str]]:
+    image_paths: list[str],
+    output_dir: str = "dataset/curvrank_ears",
+    force: bool = False
+) -> Tuple[list[str], list[Literal["left", "right"]], list[str]]:
     """
-    Preprocess the images to prepare for contour extraction, descriptor calculation, and LNBNN matching.
-    For every image, split it into different images, one for each ear. Return the list of images, the views, and the names corresponding to these new images of the ears. Each image is resized to 432x432 for rf-detr inference.
+    Preprocess images by detecting ear contours and cropping.
+
+    For every image, split it into different images, one for each ear.
+    Each image is resized to 432x432 for rf-detr inference.
 
     Args:
-        image_paths (list[str]): List of paths to the images. Extracts names from the paths.
-        output_dir (str): Directory to save the preprocessed images.
-        force (bool): Whether to force reprocessing of images that already exist.
+        image_paths: List of paths to raw images. Extracts names from the paths.
+        output_dir: Directory to save the preprocessed images.
+        force: Whether to force reprocessing of images that already exist.
 
     Returns:
-        tuple[list[str], list[Literal["left", "right"]], list[str]]: List of paths to the new images, the views, and the names corresponding to these new images of the ears.
+        Tuple of (out_paths, out_views, out_names).
     """
     failed_images: list[str] = []
     os.makedirs(output_dir, exist_ok=True)
@@ -113,14 +73,23 @@ def preprocess_images(
 
     if not force:
         existing_images = [f for f in os.listdir(output_dir) if f.endswith(".jpg")]
-        image_paths = [ip for ip in image_paths if f"{ip.split('/')[-1].split('.')[0]}_right.jpg" not in existing_images and f"{ip.split('/')[-1].split('.')[0]}_left.jpg" not in existing_images]
-        if len(image_paths) == 0:
-            print("No images to preprocess")
-        print(f"Skipping {len(existing_images)} images that already exist")
-        for ip in existing_images:
-            out_paths.append(os.path.join(output_dir, ip))
-            out_views.append(ip.split(".")[0].split("_")[-1])
-            out_names.append("_".join(ip.split(".")[0].split("_")[:-1]))
+        image_paths_to_process = []
+        for ip in image_paths:
+            base = ip.split("/")[-1].split(".")[0]
+            if f"{base}_right.jpg" not in existing_images and f"{base}_left.jpg" not in existing_images:
+                image_paths_to_process.append(ip)
+            else:
+                for ei in existing_images:
+                    if ei.startswith(base + "_"):
+                        out_paths.append(os.path.join(output_dir, ei))
+                        out_views.append(ei.split(".")[0].split("_")[-1])
+                        out_names.append("_".join(ei.split(".")[0].split("_")[:-1]))
+
+        if not image_paths_to_process:
+            logger.info("No new images to preprocess")
+        else:
+            logger.info(f"Skipping {len(existing_images)} existing images, processing {len(image_paths_to_process)} new")
+        image_paths = image_paths_to_process
 
     for image_path in tqdm(image_paths, desc="Preprocessing images"):
         name = image_path.split("/")[-1].split("_")[0]
@@ -128,15 +97,17 @@ def preprocess_images(
         
         image = cv2.imread(image_path)
         if image is None:
-            raise ValueError(f"Could not read image: {image_path}")
+            logger.warning(f"Could not read image: {image_path}")
+            failed_images.append(image_path)
+            continue
 
         try:
             contours, views = get_contour(image_path)
         except Exception as e:
-            print(f"Error getting contour for image {image_path}\nError Message: {e}")
+            logger.warning(f"Error getting contour for {image_path}: {e}")
             failed_images.append(image_path)
             continue
-        
+
         for contour, view in zip(contours, views):
             try:
                 x_min = int(contour[:, 0].min())
@@ -162,49 +133,247 @@ def preprocess_images(
                 out_views.append(view)
                 out_names.append(out_name)
             except Exception as e:
-                print(f"Error preprocessing image {image_path}\nData:\nContour: {contour}\nView: {view}\nBounding Box: {x_min, y_min, x_max, y_max}\nError Message: {e}")
+                logger.warning(f"Error preprocessing {image_path}: {e}")
                 failed_images.append(image_path)
                 continue
 
+    if failed_images:
+        logger.info(f"Failed to process {len(failed_images)} images")
+
     return out_paths, out_views, out_names
 
-def get_contours(image_paths: list[str], force: bool = False):
-    all_contours = []
-    for image_path in image_paths:
+
+def split_by_view(
+    data: pd.DataFrame,
+    ratio: float = 0.67,
+    random_seed: int = 42
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Split dataset ensuring each elephant has images in both train and test."""
+    random.seed(random_seed)
+
+    train_rows = []
+    test_rows = []
+
+    for elephant_id in data["elephant_id"].unique():
+        subset = data[data["elephant_id"] == elephant_id]
+        filepaths = subset["filepath"].tolist()
+        random.shuffle(filepaths)
+
+        split_idx = max(1, round(len(filepaths) * ratio))
+        if split_idx >= len(filepaths):
+            split_idx = len(filepaths) - 1
+
+        train_files = filepaths[:split_idx]
+        test_files = filepaths[split_idx:]
+
+        for fp in train_files:
+            row = subset[subset["filepath"] == fp].iloc[0]
+            train_rows.append(row.to_dict())
+
+        for fp in test_files:
+            row = subset[subset["filepath"] == fp].iloc[0]
+            test_rows.append(row.to_dict())
+
+    return pd.DataFrame(train_rows), pd.DataFrame(test_rows)
+
+
+def filter_by_per_ear_minimum(
+    df: pd.DataFrame,
+    min_images_per_ear: int
+) -> pd.DataFrame:
+    """
+    Filter to elephants with >= min_images_per_ear for BOTH left AND right ears.
+
+    Args:
+        df: DataFrame with columns ['elephant_id', 'filepath', 'view']
+        min_images_per_ear: Minimum images per elephant per view.
+
+    Returns:
+        Filtered DataFrame.
+    """
+    left_counts = df[df["view"] == "left"]["elephant_id"].value_counts()
+    right_counts = df[df["view"] == "right"]["elephant_id"].value_counts()
+
+    valid_left = set(left_counts[left_counts >= min_images_per_ear].index)
+    valid_right = set(right_counts[right_counts >= min_images_per_ear].index)
+
+    valid_elephants = valid_left & valid_right
+
+    logger.info(f"Elephants with >= {min_images_per_ear} left ears: {len(valid_left)}")
+    logger.info(f"Elephants with >= {min_images_per_ear} right ears: {len(valid_right)}")
+    logger.info(f"Elephants meeting BOTH criteria: {len(valid_elephants)}")
+
+    return df[df["elephant_id"].isin(valid_elephants)].copy()
+
+
+def generate_splits(
+    out_paths: list[str],
+    out_views: list[Literal["left", "right"]],
+    metadata_dir: str,
+    min_images_per_ear: int,
+    ratio: float,
+    random_seed: int = 42
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Generate train/test splits for curvrank ear images.
+
+    Creates separate splits for left and right ears, then combines them.
+
+    Args:
+        out_paths: List of preprocessed image paths.
+        out_views: List of views corresponding to each path.
+        metadata_dir: Directory to save CSV files.
+        min_images_per_ear: Minimum images per elephant per view.
+        ratio: Train/test split ratio.
+        random_seed: Random seed for reproducibility.
+
+    Returns:
+        Tuple of (left_train, left_test, right_train, right_test).
+    """
+    os.makedirs(metadata_dir, exist_ok=True)
+
+    data = []
+    for filepath, view in zip(out_paths, out_views):
         try:
-            contours, views = get_contour(image_path)
-        except Exception as e:
-            print(f"Error getting contours for image {image_path}\nError Message: {e}")
-            continue
-        all_contours.extend(contours)
-    return all_contours
+            elephant_id, _ = extract_info_from_filename(filepath)
+            data.append({
+                "elephant_id": elephant_id,
+                "filepath": filepath,
+                "view": view
+            })
+        except ValueError as e:
+            logger.warning(f"Skipping: {e}")
+
+    df = pd.DataFrame(data)
+    logger.info(f"Total preprocessed ear images: {len(df)}")
+
+    df = filter_by_per_ear_minimum(df, min_images_per_ear)
+    logger.info(f"After filtering: {len(df)} images from {df['elephant_id'].nunique()} elephants")
+
+    if df.empty:
+        raise ValueError(f"No elephants have >= {min_images_per_ear} images for both ears")
+
+    left_df = df[df["view"] == "left"].copy()
+    right_df = df[df["view"] == "right"].copy()
+
+    logger.info(f"Left ears: {len(left_df)} images from {left_df['elephant_id'].nunique()} elephants")
+    logger.info(f"Right ears: {len(right_df)} images from {right_df['elephant_id'].nunique()} elephants")
+
+    left_train, left_test = split_by_view(left_df, ratio, random_seed)
+    right_train, right_test = split_by_view(right_df, ratio, random_seed)
+
+    left_train.to_csv(os.path.join(metadata_dir, "left_train.csv"), index=False)
+    left_test.to_csv(os.path.join(metadata_dir, "left_test.csv"), index=False)
+    right_train.to_csv(os.path.join(metadata_dir, "right_train.csv"), index=False)
+    right_test.to_csv(os.path.join(metadata_dir, "right_test.csv"), index=False)
+
+    train_df = pd.concat([left_train, right_train], ignore_index=True)
+    test_df = pd.concat([left_test, right_test], ignore_index=True)
+
+    train_df.to_csv(os.path.join(metadata_dir, "train.csv"), index=False)
+    test_df.to_csv(os.path.join(metadata_dir, "test.csv"), index=False)
+
+    logger.info(f"Left train: {len(left_train)}, Left test: {len(left_test)}")
+    logger.info(f"Right train: {len(right_train)}, Right test: {len(right_test)}")
+    logger.info(f"Combined train: {len(train_df)}, Combined test: {len(test_df)}")
+    logger.info(f"Saved to {metadata_dir}")
+
+    return left_train, left_test, right_train, right_test
+
+
+def preprocess(
+    input_dir: str = None,
+    input_csv: str = None,
+    output_dir: str = "dataset/curvrank_ears",
+    metadata_dir: str = "dataset/curvrank_metadata",
+    min_images_per_ear: int = 8,
+    ratio: float = 0.67,
+    force: bool = False
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Full preprocessing pipeline: detect ears, crop, split.
+
+    Args:
+        input_dir: Directory containing raw elephant images.
+        input_csv: CSV file with filepath column (alternative to input_dir).
+        output_dir: Directory to save preprocessed ear images.
+        metadata_dir: Directory to save train/test CSVs.
+        min_images_per_ear: Minimum images per elephant PER VIEW (must meet for both).
+        ratio: Train/test split ratio.
+        force: Force reprocessing of existing images.
+
+    Returns:
+        Tuple of (train_df, test_df).
+    """
+    if input_dir:
+        image_paths = get_all_images(input_dir)
+        logger.info(f"Found {len(image_paths)} images in {input_dir}")
+    elif input_csv:
+        df = pd.read_csv(input_csv)
+        image_paths = df["filepath"].tolist()
+        logger.info(f"Found {len(image_paths)} images in {input_csv}")
+    else:
+        raise ValueError("Must specify either input_dir or input_csv")
+
+    out_paths, out_views, out_names = preprocess_images(image_paths, output_dir, force)
+    logger.info(f"Preprocessed {len(out_paths)} ear images")
+
+    left_train, left_test, right_train, right_test = generate_splits(
+        out_paths,
+        out_views,
+        metadata_dir,
+        min_images_per_ear,
+        ratio
+    )
+
+    train_df = pd.concat([left_train, right_train], ignore_index=True)
+    test_df = pd.concat([left_test, right_test], ignore_index=True)
+
+    return train_df, test_df
+
 
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser(
-        description='Preprocess elephant images for curvrank identification'
+        description="Preprocess elephant images for curvrank identification"
     )
     parser.add_argument(
-        '--input-dir',
+        "--input-dir",
         type=str,
-        help='Directory containing raw elephant images'
+        help="Directory containing raw elephant images"
     )
     parser.add_argument(
-        '--input-csv',
+        "--input-csv",
         type=str,
-        help='CSV file with filepath column containing image paths'
+        help="CSV file with filepath column containing image paths"
     )
     parser.add_argument(
-        '--output-dir',
+        "--output-dir",
         type=str,
-        default='dataset/curvrank_ears',
-        help='Directory to save preprocessed ear images (default: dataset/curvrank_ears)'
+        default="dataset/curvrank_ears",
+        help="Directory to save preprocessed ear images (default: dataset/curvrank_ears)"
     )
     parser.add_argument(
-        '--force',
-        action='store_true',
-        help='Force reprocessing of existing images'
+        "--metadata-dir",
+        type=str,
+        default="dataset/curvrank_metadata",
+        help="Directory to save train/test CSVs (default: dataset/curvrank_metadata)"
+    )
+    parser.add_argument(
+        "--min-images-per-ear",
+        type=int,
+        default=8,
+        help="Minimum images per elephant per ear (must meet for BOTH left AND right, default: 8)"
+    )
+    parser.add_argument(
+        "--ratio",
+        type=float,
+        default=0.67,
+        help="Train/test split ratio (default: 0.67)"
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force reprocessing of existing images"
     )
 
     args = parser.parse_args()
@@ -212,24 +381,18 @@ if __name__ == "__main__":
     if not args.input_dir and not args.input_csv:
         parser.error("Must specify either --input-dir or --input-csv")
 
-    image_paths = []
-    if args.input_dir:
-        from utils import get_all_images
-        image_paths = get_all_images(args.input_dir)
-        print(f"Found {len(image_paths)} images in {args.input_dir}")
-    elif args.input_csv:
-        import pandas as pd
-        df = pd.read_csv(args.input_csv)
-        image_paths = df['filepath'].tolist()
-        print(f"Found {len(image_paths)} images in {args.input_csv}")
-
-    out_paths, out_views, out_names = preprocess_images(
-        image_paths,
+    train_df, test_df = preprocess(
+        input_dir=args.input_dir,
+        input_csv=args.input_csv,
         output_dir=args.output_dir,
+        metadata_dir=args.metadata_dir,
+        min_images_per_ear=args.min_images_per_ear,
+        ratio=args.ratio,
         force=args.force
     )
 
-    print(f"Preprocessed {len(out_paths)} ear images")
-    print(f"  Left ears: {out_views.count('left')}")
-    print(f"  Right ears: {out_views.count('right')}")
-    print(f"Saved to: {args.output_dir}")
+    print(f"\nPreprocessing complete!")
+    print(f"  Preprocessed ears saved to: {args.output_dir}")
+    print(f"  Train set: {len(train_df)} images")
+    print(f"  Test set: {len(test_df)} images")
+    print(f"  Metadata saved to: {args.metadata_dir}")
