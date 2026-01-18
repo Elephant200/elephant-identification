@@ -127,6 +127,7 @@ def preprocess_images(
 
     if failed_images:
         logger.info(f"Failed to process {len(failed_images)} images")
+        logger.info(failed_images)
 
     return processed_images
 
@@ -162,9 +163,6 @@ def split_dataset_by_elephant(
             row = subset[subset["filepath"] == fp].iloc[0]
             test_data.append(row.to_dict())
 
-    print(train_data)
-    print(test_data)
-
     return pd.DataFrame(train_data), pd.DataFrame(test_data)
 
 
@@ -180,8 +178,6 @@ def generate_splits(
 
     df = pd.DataFrame(processed_images)
     logger.info(f"Total preprocessed images: {len(df)}")
-
-    print(df.head())
 
     elephant_counts = df["name"].value_counts()
     valid_elephants = elephant_counts[elephant_counts >= min_images].index

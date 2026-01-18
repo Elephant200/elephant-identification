@@ -42,12 +42,11 @@ ANCHOR_MODEL_URL = "anchor-extraction-bwwlq/5"
 
 
 def get_cache_path(image_path: str) -> str:
-    """Convert image path to cache JSON path in sibling _output directory."""
-    directory = os.path.dirname(image_path)
+    """Convert an image path to cache/curvrank/contour/filename.json."""
     filename = os.path.basename(image_path)
     name_without_ext = os.path.splitext(filename)[0]
-    output_dir = directory + "_output"
-    return os.path.join(output_dir, name_without_ext + ".json")
+    cache_dir = os.path.join("cache", "curvrank", "contour")
+    return os.path.join(cache_dir, name_without_ext + ".json")
 
 
 def load_cached_contour(cache_path: str) -> tuple[list[np.ndarray], list[Literal["left", "right"]]] | None:

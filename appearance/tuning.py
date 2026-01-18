@@ -30,7 +30,7 @@ def run_tuning(
     pool_sizes: list[int],
     n_components_list: list[int],
     top_k_values: list[int] | None = None,
-    cache_dir: str = 'appearance/.cache',
+    cache_dir: str = 'cache/appearance/features',
     device: str = 'auto'
 ) -> dict:
     """Run hyperparameter tuning across different configurations.

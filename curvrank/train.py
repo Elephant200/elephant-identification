@@ -24,7 +24,7 @@ def train(
     image_paths: list[str],
     names: list[str],
     output_path: str,
-    index_dir: str = 'curvrank/.cache/indices'
+    index_dir: str = 'cache/curvrank/indices'
 ) -> CurvrankIdentifier:
     """Train a CurvrankIdentifier model and save it.
 
@@ -117,8 +117,8 @@ if __name__ == '__main__':
     parser.add_argument(
         '--index-dir',
         type=str,
-        default='curvrank/.cache/indices',
-        help='Directory to save LNBNN index files (default: curvrank/.cache/indices)'
+        default='cache/curvrank/indices',
+        help='Directory to save LNBNN index files (default: cache/curvrank/indices)'
     )
 
     args = parser.parse_args()

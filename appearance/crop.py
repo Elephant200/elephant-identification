@@ -22,12 +22,12 @@ BG_CLIENT = InferenceHTTPClient(
     api_key=os.getenv("ROBOFLOW_API_KEY")
 )
 
-FACE_CACHE_DIR = os.path.join("images", "crop_cache")
-SAM_CACHE_DIR = os.path.join("images", "sam_cache")
+FACE_CACHE_DIR = os.path.join("cache", "appearance", "crop")
+SAM_CACHE_DIR = os.path.join("cache", "appearance", "sam")
 
 
 def get_face_cache_path(image_path: str) -> str:
-    """Convert an image path to a cache path in images/crop_cache/filename.json."""
+    """Convert an image path to a cache path in cache/appearance/crop/filename.json."""
     filename = os.path.basename(image_path)
     name_without_ext = os.path.splitext(filename)[0]
     return os.path.join(FACE_CACHE_DIR, name_without_ext + ".json")
@@ -78,7 +78,7 @@ def detect_face(image_path: str, use_cache: bool = True) -> list[dict]:
 
 
 def get_sam_cache_path(image_path: str) -> str:
-    """Convert an image path to a SAM cache path in images/sam_cache/filename.json."""
+    """Convert an image path to a SAM cache path in cache/appearance/sam/filename.json."""
     filename = os.path.basename(image_path)
     name_without_ext = os.path.splitext(filename)[0]
     return os.path.join(SAM_CACHE_DIR, name_without_ext + ".json")

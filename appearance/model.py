@@ -32,7 +32,7 @@ if not logger.handlers:
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
-DEFAULT_CACHE_DIR = 'appearance/.cache'
+DEFAULT_CACHE_DIR = 'cache/appearance/features'
 
 
 class ElephantIdentifier:

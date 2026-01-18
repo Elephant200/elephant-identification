@@ -33,7 +33,7 @@ DEFAULT_SCALES = np.array([0.02, 0.04, 0.06, 0.08], dtype=np.float32)
 DEFAULT_CURV_LENGTH = 1024
 DEFAULT_FEAT_DIM = 32
 DEFAULT_NUM_KEYPOINTS = 32
-DEFAULT_INDEX_DIR = 'curvrank/.cache/indices'
+DEFAULT_INDEX_DIR = 'cache/curvrank/indices'
 
 
 class CurvrankIdentifier:
