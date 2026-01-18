@@ -89,6 +89,7 @@ def preprocess_images(
             failed_images.append(image_path)
             continue
 
+        # Choose only highest confidence face
         face = max(faces, key=lambda f: f.get("confidence", 0))
 
         x_center = face["x"]
@@ -119,10 +120,10 @@ def preprocess_images(
                 failed_images.append(image_path)
                 continue
 
-        resized = cv2.resize(cropped, (TARGET_SIZE, TARGET_SIZE))
+        # cropped = cv2.resize(cropped, (TARGET_SIZE, TARGET_SIZE))
 
         out_path = os.path.join(output_dir, f"{base_filename}.jpg")
-        cv2.imwrite(out_path, resized)
+        cv2.imwrite(out_path, cropped)
 
         processed_images.append({
             "name": name,
@@ -266,32 +267,32 @@ if __name__ == "__main__":
     parser.add_argument(
         "--input-dir",
         type=str,
-        required=True,
+        default="dataset/ELPephants",
         help="Directory containing raw elephant images"
     )
     parser.add_argument(
         "--output-dir",
         type=str,
         default="dataset/appearance_faces",
-        help="Directory to save preprocessed face images (default: dataset/appearance_faces)"
+        help="Directory to save preprocessed face images"
     )
     parser.add_argument(
         "--metadata-dir",
         type=str,
         default="dataset/appearance_metadata",
-        help="Directory to save train/test CSVs (default: dataset/appearance_metadata)"
+        help="Directory to save train/test CSVs"
     )
     parser.add_argument(
         "--min-images",
         type=int,
         default=9,
-        help="Minimum images per elephant to include in dataset (default: 9)"
+        help="Minimum images per elephant to include in dataset"
     )
     parser.add_argument(
         "--ratio",
         type=float,
         default=0.67,
-        help="Train/test split ratio (default: 0.67)"
+        help="Train/test split ratio"
     )
     parser.add_argument(
         "--force",

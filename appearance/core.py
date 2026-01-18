@@ -16,14 +16,6 @@ from keras.applications import ResNet50
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-if not logger.handlers:
-    console_handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(levelname)s: %(message)s')
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-
 
 def configure_tensorflow(device: Literal['auto', 'CPU', 'CUDA', 'MPS'] = 'auto') -> str:
     """Configure TensorFlow for the specified or auto-detected backend.

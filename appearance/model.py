@@ -24,13 +24,6 @@ from .core import (
 )
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-if not logger.handlers:
-    console_handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(levelname)s: %(message)s')
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
 
 DEFAULT_CACHE_DIR = 'cache/appearance/features'
 
