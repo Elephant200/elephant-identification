@@ -10,6 +10,25 @@ import pandas as pd
 
 from .core import configure_tensorflow
 from .model import ElephantIdentifier
+
+# ResNet50 layer spatial dimensions (from resnet50_keras_layers.txt)
+# Maps layer name prefix to spatial size (H=W for square outputs)
+LAYER_SPATIAL_SIZES = {
+    'conv1': 112,
+    'pool1': 56,
+    'conv2': 56,
+    'conv3': 28,
+    'conv4': 14,
+    'conv5': 7,
+}
+
+
+def get_layer_spatial_size(layer_name: str) -> int:
+    """Get the spatial dimension for a ResNet50 layer."""
+    for prefix, size in LAYER_SPATIAL_SIZES.items():
+        if layer_name.startswith(prefix):
+            return size
+    raise ValueError(f"Unknown layer: {layer_name}")
 from utils import print_with_padding
 
 logger = logging.getLogger(__name__)
@@ -59,7 +78,17 @@ def run_tuning(
     accuracies = {}
 
     for layer_name in layer_names:
+        spatial_size = get_layer_spatial_size(layer_name)
+
         for pool_size in pool_sizes:
+            # Check if pool size is valid for this layer's spatial dimensions
+            if pool_size > spatial_size:
+                logger.warning(
+                    f"Skipping {layer_name} with pool_size={pool_size}: "
+                    f"pool size exceeds spatial dimension ({spatial_size}x{spatial_size})"
+                )
+                continue
+
             for n_components in n_components_list:
                 config_name = f"{layer_name}_pool_{pool_size}_pca_{n_components}"
                 print_with_padding(f"Tuning: {config_name}")
@@ -73,14 +102,14 @@ def run_tuning(
                 model.fit(
                     train_df,
                     class_mapping,
-                    cache_dir=cache_dir,
+                    cache_dir=f"{cache_dir}/train",
                     force=force
                 )
 
                 results = model.evaluate(
                     test_df,
                     top_k_values=top_k_values,
-                    cache_dir=cache_dir,
+                    cache_dir=f"{cache_dir}/test",
                     force=force
                 )
 
@@ -188,7 +217,7 @@ if __name__ == '__main__':
             "conv4_block6_out",
             "conv5_block1_out",
         ]
-        all_pool_sizes = [1, 2, 4, 6]
+        all_pool_sizes = [1, 2, 4, 6, 8, 10]
         all_n_components = [10000]
 
     logger.info("Loading training data...")
