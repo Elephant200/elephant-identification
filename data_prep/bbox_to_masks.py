@@ -63,7 +63,10 @@ def get_elephants(coco_json: Dict, root_dir: str, mode: Literal["train", "valid"
 
 if __name__ == "__main__":
     # set up argparse
-    parser = argparse.ArgumentParser(description="CurvRank Contours")
+    parser = argparse.ArgumentParser(
+        description="Convert bounding box annotations to segmentation masks",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument("--force", action="store_true", help="Force re-segmentation of all images")
     args = parser.parse_args()
 

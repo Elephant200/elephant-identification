@@ -94,7 +94,8 @@ def get_images_and_names_from_csv(csv_path: str) -> tuple[list[str], list[str]]:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Train curvrank elephant identification model'
+        description='Train curvrank elephant identification model',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
         '--train-csv',

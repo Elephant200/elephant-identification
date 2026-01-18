@@ -129,7 +129,8 @@ def print_results_table(accuracies: dict) -> None:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Tune the ResNet50 model for elephant identification'
+        description='Tune the ResNet50 model for elephant identification',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
         '--optimal',

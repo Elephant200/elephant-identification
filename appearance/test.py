@@ -89,7 +89,8 @@ def predict_image(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Test or run inference with elephant identification model'
+        description='Test or run inference with elephant identification model',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
         '--model',

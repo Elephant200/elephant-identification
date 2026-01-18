@@ -740,7 +740,8 @@ if __name__ == "__main__":
     configure_tensorflow(device='MPS')
     
     parser = argparse.ArgumentParser(
-        description='Train and evaluate elephant identification model with Apple Silicon optimizations'
+        description='Train and evaluate elephant identification model with Apple Silicon optimizations',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
         '--force', 

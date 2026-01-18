@@ -334,7 +334,8 @@ def preprocess(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Preprocess elephant images for curvrank identification"
+        description="Preprocess elephant images for curvrank identification",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
         "--input-dir",

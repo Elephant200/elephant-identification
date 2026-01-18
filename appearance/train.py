@@ -75,7 +75,8 @@ def train(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Train elephant identification model'
+        description='Train elephant identification model',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
         '--train-csv',
@@ -92,8 +93,8 @@ if __name__ == '__main__':
     parser.add_argument(
         '--output',
         type=str,
-        default='models/elephant_model.pkl',
-        help='Path to save trained model (default: models/elephant_model.pkl)'
+        default='cache/appearance/models/elephant_model.pkl',
+        help='Path to save trained model (default: cache/appearance/model/elephant_model.pkl)'
     )
     parser.add_argument(
         '--layer-name',
