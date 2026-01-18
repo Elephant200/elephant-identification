@@ -9,7 +9,7 @@ import os
 
 import pandas as pd
 
-from .core import configure_tensorflow
+from .core import configure_device
 from .model import ElephantIdentifier
 
 logger = logging.getLogger(__name__)
@@ -26,9 +26,7 @@ def train(
     train_df: pd.DataFrame,
     class_mapping: dict,
     output_path: str,
-    layer_name: str = 'conv3_block4_2_relu',
-    pool_size: int = 6,
-    n_components: int = 10000,
+    n_components: int = 1024,
     batch_size: int | None = None,
     cache_dir: str | None = None,
     force: bool = False,
@@ -40,24 +38,18 @@ def train(
         train_df: DataFrame with columns ['filepath', 'name']
         class_mapping: Dict mapping elephant name/ID to class index
         output_path: Path to save the trained model
-        layer_name: ResNet50 layer for feature extraction
-        pool_size: Max pooling size after feature extraction
         n_components: Number of PCA components
         batch_size: Batch size for feature extraction. Auto if None.
         cache_dir: Directory to cache intermediate results
         force: If True, retrain from scratch ignoring cache
-        device: TensorFlow device ('auto', 'CPU', 'CUDA', 'MPS')
+        device: PyTorch device ('auto', 'CPU', 'CUDA', 'MPS')
 
     Returns:
         ElephantIdentifier: The trained model
     """
-    configure_tensorflow(device=device)
+    configure_device(device=device)
 
-    model = ElephantIdentifier(
-        layer_name=layer_name,
-        pool_size=pool_size,
-        n_components=n_components
-    )
+    model = ElephantIdentifier(n_components=n_components)
 
     model.fit(
         train_df,
@@ -81,13 +73,13 @@ if __name__ == '__main__':
     parser.add_argument(
         '--train-csv',
         type=str,
-        required="dataset/appearance_metadata/train.csv",
+        default="dataset/appearance_metadata/train.csv",
         help='Path to training CSV file with columns [filepath, name]'
     )
     parser.add_argument(
         '--class-mapping',
         type=str,
-        required="dataset/appearance_metadata/class_mapping.json",
+        default="dataset/appearance_metadata/class_mapping.json",
         help='Path to class mapping JSON file'
     )
     parser.add_argument(
@@ -97,22 +89,10 @@ if __name__ == '__main__':
         help='Path to save trained model'
     )
     parser.add_argument(
-        '--layer-name',
-        type=str,
-        default='conv3_block4_2_relu',
-        help='ResNet50 layer for feature extraction'
-    )
-    parser.add_argument(
-        '--pool-size',
-        type=int,
-        default=6,
-        help='Max pooling size'
-    )
-    parser.add_argument(
         '--n-components',
         type=int,
-        default=10000,
-        help='Number of PCA components (default: 10000)'
+        default=1024,
+        help='Number of PCA components (MegaDescriptor outputs 1536-dim features)'
     )
     parser.add_argument(
         '--batch-size',
@@ -136,7 +116,7 @@ if __name__ == '__main__':
         type=str,
         choices=['auto', 'CPU', 'CUDA', 'MPS'],
         default='auto',
-        help='TensorFlow device to use (default: auto)'
+        help='PyTorch device to use'
     )
 
     args = parser.parse_args()
@@ -154,12 +134,9 @@ if __name__ == '__main__':
         train_df=train_df,
         class_mapping=class_mapping,
         output_path=args.output,
-        layer_name=args.layer_name,
-        pool_size=args.pool_size,
         n_components=args.n_components,
         batch_size=args.batch_size,
         cache_dir=args.cache_dir,
         force=args.force,
         device=args.device
     )
-

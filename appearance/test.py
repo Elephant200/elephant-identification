@@ -9,7 +9,7 @@ from typing import List
 
 import pandas as pd
 
-from .core import configure_tensorflow
+from .core import configure_device
 from .model import ElephantIdentifier
 
 logger = logging.getLogger(__name__)
@@ -139,7 +139,7 @@ if __name__ == '__main__':
         type=str,
         choices=['auto', 'CPU', 'CUDA', 'MPS'],
         default='auto',
-        help='TensorFlow device to use (default: auto)'
+        help='PyTorch device to use'
     )
     parser.add_argument(
         '--output-json',
@@ -153,7 +153,7 @@ if __name__ == '__main__':
     if not args.test_csv and not args.image:
         parser.error("Must specify either --test-csv or --image")
 
-    configure_tensorflow(device=args.device)
+    configure_device(device=args.device)
 
     logger.info(f"Loading model from {args.model}...")
     model = ElephantIdentifier.load(args.model)

@@ -19,7 +19,7 @@ from utils import get_all_images
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TARGET_SIZE = 224
+TARGET_SIZE = 384
 PADDING = 0.05
 
 

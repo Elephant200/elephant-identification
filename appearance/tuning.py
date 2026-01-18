@@ -1,6 +1,6 @@
 """Hyperparameter tuning script for elephant identification model.
 
-Tests different layer names, pool sizes, and PCA components to find optimal configuration.
+Tests different PCA component counts to find optimal configuration.
 Includes preprocessing pipeline so it can be run standalone.
 """
 import argparse
@@ -10,30 +10,11 @@ import os
 
 import pandas as pd
 
-from .core import configure_tensorflow
+from .core import configure_device
 from .model import ElephantIdentifier
 from .preprocess import preprocess
 
 from utils import print_with_padding
-
-# ResNet50 layer spatial dimensions (from resnet50_keras_layers.txt)
-# Maps layer name prefix to spatial size (H=W for square outputs)
-LAYER_SPATIAL_SIZES = {
-    'conv1': 112,
-    'pool1': 56,
-    'conv2': 56,
-    'conv3': 28,
-    'conv4': 14,
-    'conv5': 7,
-}
-
-
-def get_layer_spatial_size(layer_name: str) -> int:
-    """Get the spatial dimension for a ResNet50 layer."""
-    for prefix, size in LAYER_SPATIAL_SIZES.items():
-        if layer_name.startswith(prefix):
-            return size
-    raise ValueError(f"Unknown layer: {layer_name}")
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -42,8 +23,6 @@ MODEL_CACHE_DIR = 'cache/appearance/models'
 
 
 def get_model_path(
-    layer_name: str,
-    pool_size: int,
     ratio: float,
     min_images: int,
     use_rembg: bool,
@@ -52,8 +31,6 @@ def get_model_path(
     """Generate a descriptive model filename based on configuration.
     
     Args:
-        layer_name: ResNet50 layer name
-        pool_size: Max pooling size
         ratio: Train/test split ratio
         min_images: Minimum images per elephant
         use_rembg: Whether background removal was used
@@ -63,7 +40,7 @@ def get_model_path(
         Path to model file in cache/appearance/models/
     """
     rembg_str = "rembg" if use_rembg else "norembg"
-    filename = f"split{ratio}_{rembg_str}_min{min_images}_{layer_name}_pool{pool_size}_pca{n_components}.pkl"
+    filename = f"megadescriptor_split{ratio}_{rembg_str}_min{min_images}_pca{n_components}.pkl"
     return os.path.join(MODEL_CACHE_DIR, filename)
 
 
@@ -71,8 +48,6 @@ def run_tuning(
     train_df: pd.DataFrame,
     test_df: pd.DataFrame,
     class_mapping: dict,
-    layer_names: list[str],
-    pool_sizes: list[int],
     n_components_list: list[int],
     ratio: float = 0.67,
     min_images: int = 9,
@@ -88,15 +63,13 @@ def run_tuning(
         train_df: Training DataFrame with columns ['filepath', 'name']
         test_df: Test DataFrame with columns ['filepath', 'name']
         class_mapping: Dict mapping elephant name/ID to class index
-        layer_names: List of ResNet50 layer names to test
-        pool_sizes: List of pool sizes to test
         n_components_list: List of PCA component counts to test
         ratio: Train/test split ratio (for model naming)
         min_images: Minimum images per elephant (for model naming)
         use_rembg: Whether background removal was used (for model naming)
         top_k_values: List of k values for top-k accuracy
         cache_dir: Directory to cache features
-        device: TensorFlow device to use
+        device: PyTorch device to use
         force: If True, ignore cached features and retrain models
 
     Returns:
@@ -105,68 +78,50 @@ def run_tuning(
     if top_k_values is None:
         top_k_values = [1, 3, 5, 10]
 
-    configure_tensorflow(device=device)
+    configure_device(device=device)
     os.makedirs(MODEL_CACHE_DIR, exist_ok=True)
 
     accuracies = {}
 
-    for layer_name in layer_names:
-        spatial_size = get_layer_spatial_size(layer_name)
+    for n_components in n_components_list:
+        config_name = f"megadescriptor_pca_{n_components}"
+        print_with_padding(f"Tuning: {config_name}")
 
-        for pool_size in pool_sizes:
-            # Check if pool size is valid for this layer's spatial dimensions
-            if pool_size > spatial_size:
-                logger.warning(
-                    f"Skipping {layer_name} with pool_size={pool_size}: "
-                    f"pool size exceeds spatial dimension ({spatial_size}x{spatial_size})"
-                )
-                continue
+        model_path = get_model_path(
+            ratio=ratio,
+            min_images=min_images,
+            use_rembg=use_rembg,
+            n_components=n_components
+        )
 
-            for n_components in n_components_list:
-                config_name = f"{layer_name}_pool_{pool_size}_pca_{n_components}"
-                print_with_padding(f"Tuning: {config_name}")
+        # Try to load existing model
+        if not force and os.path.exists(model_path):
+            model = ElephantIdentifier.load(model_path)
+        else:
+            model = ElephantIdentifier(n_components=n_components)
 
-                model_path = get_model_path(
-                    layer_name=layer_name,
-                    pool_size=pool_size,
-                    ratio=ratio,
-                    min_images=min_images,
-                    use_rembg=use_rembg,
-                    n_components=n_components
-                )
+            model.fit(
+                train_df,
+                class_mapping,
+                cache_dir=f"{cache_dir}/train",
+                force=force
+            )
 
-                # Try to load existing model
-                if not force and os.path.exists(model_path):
-                    model = ElephantIdentifier.load(model_path)
-                else:
-                    model = ElephantIdentifier(
-                        layer_name=layer_name,
-                        pool_size=pool_size,
-                        n_components=n_components
-                    )
+            # Save the trained model
+            model.save(model_path)
+            logger.info(f"Saved model to {model_path}")
 
-                    model.fit(
-                        train_df,
-                        class_mapping,
-                        cache_dir=f"{cache_dir}/train",
-                        force=force
-                    )
+        results = model.evaluate(
+            test_df,
+            top_k_values=top_k_values,
+            cache_dir=f"{cache_dir}/test",
+            force=force
+        )
 
-                    # Save the trained model
-                    model.save(model_path)
-                    logger.info(f"Saved model to {model_path}")
+        accuracies[config_name] = results
 
-                results = model.evaluate(
-                    test_df,
-                    top_k_values=top_k_values,
-                    cache_dir=f"{cache_dir}/test",
-                    force=force
-                )
-
-                accuracies[config_name] = results
-
-                for k, metrics in results.items():
-                    logger.info(f"  {k}: {metrics['accuracy']:.3f}")
+        for k, metrics in results.items():
+            logger.info(f"  {k}: {metrics['accuracy']:.3f}")
 
     return accuracies
 
@@ -174,22 +129,6 @@ def run_tuning(
 def print_results_table(accuracies: dict) -> None:
     """Print tuning results as a formatted table."""
     print_with_padding("Tuning Results")
-    
-    # header = f"| {'Test Name':<35} | {'Top 1':<20} | {'Top 3':<20} | {'Top 5':<20} | {'Top 10':<20} |"
-    # print(header)
-    # print(f"| {'-'*35} | {'-'*20} | {'-'*20} | {'-'*20} | {'-'*20} |")
-
-    # for test_name, test_accuracies in accuracies.items():
-    #     row = f"| {test_name:<35} | "
-    #     for key in ['top_1', 'top_3', 'top_5', 'top_10']:
-    #         if key in test_accuracies:
-    #             acc = test_accuracies[key]
-    #             row += f"{acc['accuracy']*100:.1f}% ({acc['correct']}/{acc['total']}) | "
-    #         else:
-    #             row += f"{'N/A':<20} | "
-    #     print(row)
-
-    # print_with_padding("")
 
     compact_header = f"| {'Test Name':<35} | {'Top 1':<10} | {'Top 3':<10} | {'Top 5':<10} | {'Top 10':<10} |"
     print(compact_header)
@@ -210,7 +149,7 @@ def print_results_table(accuracies: dict) -> None:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Tune the ResNet50 model for elephant identification',
+        description='Tune the MegaDescriptor model for elephant identification',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
@@ -260,16 +199,18 @@ if __name__ == '__main__':
     # Model/tuning arguments
     tuning_group = parser.add_argument_group('tuning')
     tuning_group.add_argument(
-        '--optimal',
-        action='store_true',
-        help='Use the optimal layer and pool size'
+        '--n-components',
+        type=int,
+        nargs='+',
+        default=[256, 512, 1024],
+        help='List of PCA component counts to test'
     )
     tuning_group.add_argument(
         '--device',
         type=str,
         choices=['auto', 'CPU', 'CUDA', 'MPS'],
         default='auto',
-        help='TensorFlow device to use'
+        help='PyTorch device to use'
     )
     tuning_group.add_argument(
         '--output-json',
@@ -324,26 +265,11 @@ if __name__ == '__main__':
             class_mapping = json.load(f)
         logger.info(f"Loaded {len(class_mapping)} class mappings")
 
-    if args.optimal:
-        all_layer_names = ["conv4_block6_out"]
-        all_pool_sizes = [6]
-        all_n_components = [10000]
-    else:
-        all_layer_names = [
-            "conv3_block4_2_relu",
-            "conv4_block6_out",
-            "conv5_block1_out",
-        ]
-        all_pool_sizes = [2, 4, 6, 7, 8, 10]
-        all_n_components = [10000]
-
     accuracies = run_tuning(
         train_df=train_df,
         test_df=test_df,
         class_mapping=class_mapping,
-        layer_names=all_layer_names,
-        pool_sizes=all_pool_sizes,
-        n_components_list=all_n_components,
+        n_components_list=args.n_components,
         ratio=args.ratio,
         min_images=args.min_images,
         use_rembg=use_rembg,

@@ -14,7 +14,7 @@ This project explores whether combining two complementary approaches can address
 
 ## Approaches
 
-**Appearance-based identification** follows the baseline model from Körschens et al. (2018), using ResNet50 as a feature extractor, followed by PCA dimensionality reduction and SVM classification. Images are preprocessed using YOLOv11 for face detection and cropping. Future work will incorporate background removal techniques from Yu et al. (2024) to improve robustness.
+**Appearance-based identification** uses MegaDescriptor-L-384, a foundation model for wildlife re-identification, as a feature extractor, followed by PCA dimensionality reduction and SVM classification. Images are preprocessed using YOLOv11 for face detection and cropping, with optional background removal using SAM-based segmentation.
 
 **CurvRank** adapts the integral curvature methods developed by Weideman et al. (2017, 2020) for marine mammals to elephant ear identification. Ear contours are extracted using RF-DETR segmentation models, then processed to compute curvature descriptors along the curves. Local Naive Bayes Nearest Neighbor (LNBNN) matching identifies individuals by comparing these curvature signatures. Ears are processed separately (left and right) since they present different profiles.
 
