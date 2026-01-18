@@ -81,13 +81,13 @@ if __name__ == '__main__':
     parser.add_argument(
         '--train-csv',
         type=str,
-        required=True,
+        required="dataset/appearance_metadata/train.csv",
         help='Path to training CSV file with columns [filepath, name]'
     )
     parser.add_argument(
         '--class-mapping',
         type=str,
-        required=True,
+        required="dataset/appearance_metadata/class_mapping.json",
         help='Path to class mapping JSON file'
     )
     parser.add_argument(

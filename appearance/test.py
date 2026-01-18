@@ -101,7 +101,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--test-csv',
         type=str,
-        default=None,
+        default="dataset/appearance_metadata/test.csv",
         help='Path to test CSV file for evaluation'
     )
     parser.add_argument(

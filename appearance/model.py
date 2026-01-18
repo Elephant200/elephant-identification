@@ -141,6 +141,14 @@ class ElephantIdentifier:
 
         start_time = time.perf_counter()
         X = np.array(raw_features)
+
+        if X.shape[0] != len(train_df):
+            raise ValueError(
+                f"Feature cache mismatch: cached features have {X.shape[0]} samples "
+                f"but training data has {len(train_df)} samples. "
+                f"The cache may be stale. Rerun with --force to recompute features."
+            )
+
         self._scaler = StandardScaler()
         X_scaled = self._scaler.fit_transform(X)
 

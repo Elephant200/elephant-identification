@@ -31,7 +31,8 @@ def run_tuning(
     n_components_list: list[int],
     top_k_values: list[int] | None = None,
     cache_dir: str = 'cache/appearance/features',
-    device: str = 'auto'
+    device: str = 'auto',
+    force: bool = False
 ) -> dict:
     """Run hyperparameter tuning across different configurations.
 
@@ -45,6 +46,7 @@ def run_tuning(
         top_k_values: List of k values for top-k accuracy
         cache_dir: Directory to cache features
         device: TensorFlow device to use
+        force: If True, ignore cached features and recompute
 
     Returns:
         Dict mapping config name to accuracy results
@@ -72,14 +74,14 @@ def run_tuning(
                     train_df,
                     class_mapping,
                     cache_dir=cache_dir,
-                    force=False
+                    force=force
                 )
 
                 results = model.evaluate(
                     test_df,
                     top_k_values=top_k_values,
                     cache_dir=cache_dir,
-                    force=False
+                    force=force
                 )
 
                 accuracies[config_name] = results
@@ -168,6 +170,11 @@ if __name__ == '__main__':
         default=None,
         help='Optional path to save results as JSON'
     )
+    parser.add_argument(
+        '--force',
+        action='store_true',
+        help='Force recomputation of cached features'
+    )
 
     args = parser.parse_args()
 
@@ -204,7 +211,8 @@ if __name__ == '__main__':
         layer_names=all_layer_names,
         pool_sizes=all_pool_sizes,
         n_components_list=all_n_components,
-        device=args.device
+        device=args.device,
+        force=args.force
     )
 
     print_results_table(accuracies)
