@@ -113,6 +113,8 @@ def preprocess_images(
             cropped = remove_background(cropped, image_path=image_path, crop_bbox=crop_bbox)
         except Exception as e:
             logger.warning(f"Background removal failed for {image_path}: {e}")
+            failed_images.append(image_path)
+            continue
 
         resized = cv2.resize(cropped, (TARGET_SIZE, TARGET_SIZE))
 
@@ -253,7 +255,8 @@ def preprocess(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Preprocess elephant images for appearance-based identification"
+        description="Preprocess elephant images for appearance-based identification",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
         "--input-dir",
