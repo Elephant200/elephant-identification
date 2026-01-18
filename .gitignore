@@ -144,7 +144,7 @@ processing/
 
 # Model artifacts
 *.pkl
-.cache/
+cache/
 
 # CurvRank temporary files
 curvrank/_[!_]*
