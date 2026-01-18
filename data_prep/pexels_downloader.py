@@ -336,12 +336,15 @@ def delete_non_large_images(output_dir: str = "elephant_head_training") -> None:
 
 def main(argv: list[str] | None = None) -> None:
     load_dotenv()
-    parser = argparse.ArgumentParser(description="Download images from Pexels.")
-    parser.add_argument("--query", default="African elephant")
-    parser.add_argument("--size", default="large", choices=["tiny", "small", "medium", "large", "large2x"])
-    parser.add_argument("--count", type=int, default=2000)
-    parser.add_argument("--output-dir", default="images/pexels_elephants")
-    parser.add_argument("--api-key", default=None, help="Optional Pexels API key override.")
+    parser = argparse.ArgumentParser(
+        description="Download images from Pexels.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument("--query", default="African elephant", help="Search query for Pexels")
+    parser.add_argument("--size", default="large", choices=["tiny", "small", "medium", "large", "large2x"], help="Image size to download")
+    parser.add_argument("--count", type=int, default=2000, help="Number of images to download")
+    parser.add_argument("--output-dir", default="images/pexels_elephants", help="Output directory for downloaded images")
+    parser.add_argument("--api-key", default=None, help="Pexels API key (uses PEXELS_API_KEY env var if not provided)")
     args = parser.parse_args(argv)
 
     download_images(
