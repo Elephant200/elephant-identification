@@ -36,7 +36,8 @@ def extract_name_from_filepath(filepath: str) -> str:
 def preprocess_images(
     image_paths: list[str],
     output_dir: str = "dataset/appearance_faces",
-    force: bool = False
+    force: bool = False,
+    skip_rembg: bool = False
 ) -> list[dict]:
     """
     Preprocess images by detecting faces, removing background, and cropping.
@@ -45,6 +46,7 @@ def preprocess_images(
         image_paths: List of paths to raw elephant images.
         output_dir: Directory to save preprocessed face images.
         force: Whether to force reprocessing of existing images.
+        skip_rembg: Whether to skip background removal.
 
     Returns:
         List of dicts with 'name', 'filepath', and 'original_path' keys.
@@ -108,13 +110,14 @@ def preprocess_images(
 
         cropped = image[y_min:y_max, x_min:x_max]
 
-        try:
-            crop_bbox = {"x_min": x_min, "y_min": y_min, "x_max": x_max, "y_max": y_max}
-            cropped = remove_background(cropped, image_path=image_path, crop_bbox=crop_bbox)
-        except Exception as e:
-            logger.warning(f"Background removal failed for {image_path}: {e}")
-            failed_images.append(image_path)
-            continue
+        if not skip_rembg:
+            try:
+                crop_bbox = {"x_min": x_min, "y_min": y_min, "x_max": x_max, "y_max": y_max}
+                cropped = remove_background(cropped, image_path=image_path, crop_bbox=crop_bbox)
+            except Exception as e:
+                logger.warning(f"Background removal failed for {image_path}: {e}")
+                failed_images.append(image_path)
+                continue
 
         resized = cv2.resize(cropped, (TARGET_SIZE, TARGET_SIZE))
 
@@ -221,7 +224,8 @@ def preprocess(
     metadata_dir: str = "dataset/appearance_metadata",
     min_images: int = 9,
     ratio: float = 0.67,
-    force: bool = False
+    force: bool = False,
+    skip_rembg: bool = False
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Full preprocessing pipeline: detect faces, remove background, crop, split.
@@ -233,6 +237,7 @@ def preprocess(
         min_images: Minimum images per elephant to include.
         ratio: Train/test split ratio.
         force: Force reprocessing of existing images.
+        skip_rembg: Skip background removal step.
 
     Returns:
         Tuple of (train_df, test_df).
@@ -240,7 +245,7 @@ def preprocess(
     image_paths = get_all_images(input_dir)
     logger.info(f"Found {len(image_paths)} images in {input_dir}")
 
-    processed_images = preprocess_images(image_paths, output_dir, force)
+    processed_images = preprocess_images(image_paths, output_dir, force, skip_rembg)
     logger.info(f"Preprocessed {len(processed_images)} images")
 
     train_df, test_df = generate_splits(
@@ -293,6 +298,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Force reprocessing of existing images"
     )
+    parser.add_argument(
+        "--no-rembg",
+        action="store_true",
+        help="Skip background removal step"
+    )
 
     args = parser.parse_args()
 
@@ -302,7 +312,8 @@ if __name__ == "__main__":
         metadata_dir=args.metadata_dir,
         min_images=args.min_images,
         ratio=args.ratio,
-        force=args.force
+        force=args.force,
+        skip_rembg=args.no_rembg
     )
 
     print(f"\nPreprocessing complete!")
