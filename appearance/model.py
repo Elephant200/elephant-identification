@@ -1,6 +1,6 @@
 """ElephantIdentifier model class.
 
-Unified model that wraps ResNet50 feature extraction, PCA dimensionality
+Unified model that wraps MegaDescriptor feature extraction, PCA dimensionality
 reduction, and SVM classification into a single saveable/loadable object.
 """
 import logging
@@ -9,9 +9,9 @@ import pickle
 import time
 from typing import Dict, List, Tuple
 
-import keras
 import numpy as np
 import pandas as pd
+import torch
 from sklearn.decomposition import PCA
 from sklearn.metrics import top_k_accuracy_score
 from sklearn.preprocessing import StandardScaler
@@ -31,36 +31,27 @@ DEFAULT_CACHE_DIR = 'cache/appearance/features'
 class ElephantIdentifier:
     """Unified elephant identification model.
 
-    Combines ResNet50 feature extraction, StandardScaler, PCA dimensionality
+    Combines MegaDescriptor feature extraction, StandardScaler, PCA dimensionality
     reduction, and SVM classification into a single model that can be saved
     and loaded for inference.
 
     Attributes:
-        layer_name: ResNet50 layer used for feature extraction
-        pool_size: Max pooling size after feature extraction
         n_components: Number of PCA components
         class_mapping: Dict mapping elephant name/ID to class index
         reverse_mapping: Dict mapping class index to elephant name/ID
     """
 
-    def __init__(
-        self,
-        layer_name: str = 'conv3_block4_2_relu',
-        pool_size: int = 6,
-        n_components: int = 10000
-    ):
+    def __init__(self, n_components: int = 1024):
         """Initialize the identifier with model hyperparameters.
 
         Args:
-            layer_name: ResNet50 layer name for feature extraction
-            pool_size: Max pooling size. Use 1 to disable pooling.
-            n_components: Number of PCA components to retain
+            n_components: Number of PCA components to retain.
+                          MegaDescriptor-L-384 outputs 1536-dim features,
+                          so max useful value is 1536.
         """
-        self.layer_name = layer_name
-        self.pool_size = pool_size
         self.n_components = n_components
 
-        self._feature_extractor: keras.Model | None = None
+        self._feature_extractor: torch.nn.Module | None = None
         self._scaler: StandardScaler | None = None
         self._pca: PCA | None = None
         self._svm: SVC | None = None
@@ -76,22 +67,16 @@ class ElephantIdentifier:
     def is_fitted(self) -> bool:
         return self._is_fitted
 
-    def _ensure_feature_extractor(self) -> keras.Model:
+    def _ensure_feature_extractor(self) -> torch.nn.Module:
         """Lazily create the feature extractor."""
         if self._feature_extractor is None:
-            self._feature_extractor = create_feature_extractor(
-                self.layer_name,
-                self.pool_size
-            )
+            self._feature_extractor = create_feature_extractor()
         return self._feature_extractor
 
     def _get_cache_path(self, cache_dir: str, prefix: str = 'train') -> str:
         """Get cache file path for features."""
         os.makedirs(cache_dir, exist_ok=True)
-        return os.path.join(
-            cache_dir,
-            f"{self.layer_name}_pool{self.pool_size}.pkl"
-        )
+        return os.path.join(cache_dir, "megadescriptor_l384.pkl")
 
     def fit(
         self,
@@ -113,8 +98,8 @@ class ElephantIdentifier:
         Returns:
             self: The fitted model
         """
-        logger.info(f"Training pipeline: ResNet50({self.layer_name}) -> "
-                    f"Pool({self.pool_size}) -> PCA({self.n_components}) -> SVM")
+        logger.info(f"Training pipeline: MegaDescriptor-L-384 -> "
+                    f"PCA({self.n_components}) -> SVM")
 
         self._class_mapping = class_mapping
         self._reverse_mapping = {v: k for k, v in class_mapping.items()}
@@ -333,8 +318,7 @@ class ElephantIdentifier:
         os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
 
         state = {
-            'layer_name': self.layer_name,
-            'pool_size': self.pool_size,
+            'model_type': 'megadescriptor_l384',
             'n_components': self.n_components,
             'scaler': self._scaler,
             'pca': self._pca,
@@ -361,11 +345,7 @@ class ElephantIdentifier:
         with open(path, 'rb') as f:
             state = pickle.load(f)
 
-        model = cls(
-            layer_name=state['layer_name'],
-            pool_size=state['pool_size'],
-            n_components=state['n_components']
-        )
+        model = cls(n_components=state['n_components'])
 
         model._scaler = state['scaler']
         model._pca = state['pca']
@@ -380,6 +360,5 @@ class ElephantIdentifier:
     def __repr__(self) -> str:
         status = "fitted" if self._is_fitted else "unfitted"
         n_classes = len(self._class_mapping) if self._class_mapping else 0
-        return (f"ElephantIdentifier(layer={self.layer_name}, pool={self.pool_size}, "
+        return (f"ElephantIdentifier(model=MegaDescriptor-L-384, "
                 f"pca={self.n_components}, classes={n_classes}, {status})")
-
