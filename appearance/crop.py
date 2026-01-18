@@ -135,8 +135,7 @@ def _run_sam_workflow(image: np.ndarray) -> list[dict]:
 def remove_background(
     image: np.ndarray,
     image_path: str | None = None,
-    crop_bbox: Any | None = None,
-    use_cache: bool = True
+    crop_bbox: Any | None = None
 ) -> np.ndarray:
     """Remove the background from the image using SAM3.
     
@@ -146,7 +145,6 @@ def remove_background(
         image: The cropped face image as numpy array.
         image_path: Original image path (for caching). If None, no caching.
         crop_bbox: Bounding box of crop in original image coords. Stored in cache.
-        use_cache: Whether to use cached SAM results if available.
         
     Returns:
         Image with background removed.
@@ -156,7 +154,7 @@ def remove_background(
     
     cache_path = get_sam_cache_path(image_path) if image_path else None
     
-    if use_cache and cache_path:
+    if cache_path:
         cached = load_cached_sam(cache_path)
         if cached is not None:
             body_rles = [p["rle_mask"] for p in cached.get("sam_body", {}).get("predictions", [])]
