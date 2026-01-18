@@ -94,19 +94,19 @@ if __name__ == '__main__':
         '--output',
         type=str,
         default='cache/appearance/models/elephant_model.pkl',
-        help='Path to save trained model (default: cache/appearance/model/elephant_model.pkl)'
+        help='Path to save trained model'
     )
     parser.add_argument(
         '--layer-name',
         type=str,
         default='conv3_block4_2_relu',
-        help='ResNet50 layer for feature extraction (default: conv3_block4_2_relu)'
+        help='ResNet50 layer for feature extraction'
     )
     parser.add_argument(
         '--pool-size',
         type=int,
         default=6,
-        help='Max pooling size (default: 6)'
+        help='Max pooling size'
     )
     parser.add_argument(
         '--n-components',
@@ -123,8 +123,8 @@ if __name__ == '__main__':
     parser.add_argument(
         '--cache-dir',
         type=str,
-        default="cache/appearance/features",
-        help='Directory to cache features (default: cache/appearance/features)'
+        default="cache/appearance/features/train",
+        help='Directory to cache features'
     )
     parser.add_argument(
         '--force',

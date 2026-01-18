@@ -126,7 +126,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--cache-dir',
         type=str,
-        default='cache/appearance/features',
+        default='cache/appearance/features/test',
         help='Directory to cache features (default: cache/appearance/features)'
     )
     parser.add_argument(

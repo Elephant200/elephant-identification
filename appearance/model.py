@@ -97,7 +97,7 @@ class ElephantIdentifier:
         os.makedirs(cache_dir, exist_ok=True)
         return os.path.join(
             cache_dir,
-            f"{prefix}_features_{self.layer_name}_pool{self.pool_size}.pkl"
+            f"{self.layer_name}_pool{self.pool_size}.pkl"
         )
 
     def fit(
