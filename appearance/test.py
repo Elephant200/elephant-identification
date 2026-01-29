@@ -1,6 +1,7 @@
 """Testing and inference script for elephant identification model.
 
 Provides CLI interface for evaluating on test sets or predicting single images.
+Works with both ResNet50 and MegaDescriptor models (auto-detected from saved model).
 """
 import argparse
 import json
@@ -9,7 +10,7 @@ from typing import List
 
 import pandas as pd
 
-from .core import configure_tensorflow
+from .core import configure_device
 from .model import ElephantIdentifier
 
 logger = logging.getLogger(__name__)
@@ -127,7 +128,7 @@ if __name__ == '__main__':
         '--cache-dir',
         type=str,
         default='cache/appearance/features/test',
-        help='Directory to cache features (default: cache/appearance/features)'
+        help='Directory to cache features'
     )
     parser.add_argument(
         '--force',
@@ -139,7 +140,7 @@ if __name__ == '__main__':
         type=str,
         choices=['auto', 'CPU', 'CUDA', 'MPS'],
         default='auto',
-        help='TensorFlow device to use (default: auto)'
+        help='PyTorch device to use'
     )
     parser.add_argument(
         '--output-json',
@@ -153,7 +154,7 @@ if __name__ == '__main__':
     if not args.test_csv and not args.image:
         parser.error("Must specify either --test-csv or --image")
 
-    configure_tensorflow(device=args.device)
+    configure_device(device=args.device)
 
     logger.info(f"Loading model from {args.model}...")
     model = ElephantIdentifier.load(args.model)
@@ -183,4 +184,3 @@ if __name__ == '__main__':
         with open(args.output_json, 'w') as f:
             json.dump(results, f, indent=2)
         logger.info(f"Results saved to {args.output_json}")
-
