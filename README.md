@@ -37,7 +37,7 @@ Both methods are trained and evaluated on the ELPephants dataset (Körschens & D
 
 ## Project Status
 
-This is an active research project. Both identification pipelines are functional but ongoing work focuses on improving robustness, testing ensemble methods, and evaluating performance across different image quality conditions.
+This is an active research project. Both identification pipelines are functional but ongoing work focuses on improving robustness, testing ensemble methods, and evaluating performance across different image quality conditions. I have currently achieved 68% top-1 accuracy and 96.7% top-10 accuracy using the ResNet50 deep feature extractor.
 
 ## Acknowledgements
 
