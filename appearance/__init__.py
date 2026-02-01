@@ -1,14 +1,15 @@
 """Elephant identification package.
 
 Provides tools for training and running elephant identification models
-using ResNet50 or MegaDescriptor feature extraction, PCA, and SVM classification.
+using ResNet50 feature extraction, PCA, and SVM classification.
 """
-from .model import ElephantIdentifier, ResNet50Identifier, MegaDescriptorIdentifier
-from .core import configure_device
+from .model import ElephantIdentifier
+from .core import configure_tensorflow, load_image, create_feature_extractor
 
 __all__ = [
     'ElephantIdentifier',
-    'ResNet50Identifier',
-    'MegaDescriptorIdentifier',
-    'configure_device',
+    'configure_tensorflow',
+    'load_image',
+    'create_feature_extractor',
 ]
+

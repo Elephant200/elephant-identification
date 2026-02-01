@@ -1,6 +1,6 @@
 """Training script for elephant identification model.
 
-Provides CLI interface for training ResNet50 or MegaDescriptor models.
+Provides CLI interface for training the ElephantIdentifier model.
 """
 import argparse
 import json
@@ -9,8 +9,8 @@ import os
 
 import pandas as pd
 
-from .core import configure_device
-from .model import ElephantIdentifier, ResNet50Identifier, MegaDescriptorIdentifier
+from .core import configure_tensorflow
+from .model import ElephantIdentifier
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -22,18 +22,19 @@ if not logger.handlers:
     logger.addHandler(console_handler)
 
 
-def train_resnet50(
+def train(
     train_df: pd.DataFrame,
     class_mapping: dict,
     output_path: str,
-    layer_name: str = 'layer3',
+    layer_name: str = 'conv3_block4_2_relu',
     pool_size: int = 6,
     n_components: int = 10000,
     batch_size: int | None = None,
     cache_dir: str | None = None,
-    force: bool = False
-) -> ResNet50Identifier:
-    """Train a ResNet50Identifier model and save it.
+    force: bool = False,
+    device: str = 'auto'
+) -> ElephantIdentifier:
+    """Train an ElephantIdentifier model and save it.
 
     Args:
         train_df: DataFrame with columns ['filepath', 'name']
@@ -45,11 +46,14 @@ def train_resnet50(
         batch_size: Batch size for feature extraction. Auto if None.
         cache_dir: Directory to cache intermediate results
         force: If True, retrain from scratch ignoring cache
+        device: TensorFlow device ('auto', 'CPU', 'CUDA', 'MPS')
 
     Returns:
-        ResNet50Identifier: The trained model
+        ElephantIdentifier: The trained model
     """
-    model = ResNet50Identifier(
+    configure_tensorflow(device=device)
+
+    model = ElephantIdentifier(
         layer_name=layer_name,
         pool_size=pool_size,
         n_components=n_components
@@ -69,60 +73,21 @@ def train_resnet50(
     return model
 
 
-def train_megadescriptor(
-    train_df: pd.DataFrame,
-    class_mapping: dict,
-    output_path: str,
-    n_components: int = 1024,
-    batch_size: int | None = None,
-    cache_dir: str | None = None,
-    force: bool = False
-) -> MegaDescriptorIdentifier:
-    """Train a MegaDescriptorIdentifier model and save it.
-
-    Args:
-        train_df: DataFrame with columns ['filepath', 'name']
-        class_mapping: Dict mapping elephant name/ID to class index
-        output_path: Path to save the trained model
-        n_components: Number of PCA components
-        batch_size: Batch size for feature extraction. Auto if None.
-        cache_dir: Directory to cache intermediate results
-        force: If True, retrain from scratch ignoring cache
-
-    Returns:
-        MegaDescriptorIdentifier: The trained model
-    """
-    model = MegaDescriptorIdentifier(n_components=n_components)
-
-    model.fit(
-        train_df,
-        class_mapping,
-        batch_size=batch_size,
-        cache_dir=cache_dir,
-        force=force
-    )
-
-    model.save(output_path)
-    logger.info(f"Training complete. Model saved to {output_path}")
-
-    return model
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Train elephant identification model (ResNet50 or MegaDescriptor)',
+        description='Train elephant identification model',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
         '--train-csv',
         type=str,
-        default="dataset/appearance_metadata/train.csv",
+        required="dataset/appearance_metadata/train.csv",
         help='Path to training CSV file with columns [filepath, name]'
     )
     parser.add_argument(
         '--class-mapping',
         type=str,
-        default="dataset/appearance_metadata/class_mapping.json",
+        required="dataset/appearance_metadata/class_mapping.json",
         help='Path to class mapping JSON file'
     )
     parser.add_argument(
@@ -132,31 +97,22 @@ if __name__ == '__main__':
         help='Path to save trained model'
     )
     parser.add_argument(
-        '--model',
-        type=str,
-        choices=['resnet50', 'megadescriptor'],
-        required=True,
-        help='Model type to train (required)'
-    )
-    # ResNet50-specific arguments
-    parser.add_argument(
         '--layer-name',
         type=str,
-        default='layer3',
-        help='ResNet50 layer for feature extraction (only for resnet50)'
+        default='conv3_block4_2_relu',
+        help='ResNet50 layer for feature extraction'
     )
     parser.add_argument(
         '--pool-size',
         type=int,
         default=6,
-        help='Max pooling size (only for resnet50)'
+        help='Max pooling size'
     )
-    # Common arguments
     parser.add_argument(
         '--n-components',
         type=int,
-        default=None,
-        help='Number of PCA components (default: 10000 for resnet50, 1024 for megadescriptor)'
+        default=10000,
+        help='Number of PCA components (default: 10000)'
     )
     parser.add_argument(
         '--batch-size',
@@ -180,12 +136,10 @@ if __name__ == '__main__':
         type=str,
         choices=['auto', 'CPU', 'CUDA', 'MPS'],
         default='auto',
-        help='PyTorch device to use'
+        help='TensorFlow device to use (default: auto)'
     )
 
     args = parser.parse_args()
-
-    configure_device(device=args.device)
 
     logger.info("Loading training data...")
     train_df = pd.read_csv(args.train_csv)
@@ -196,27 +150,16 @@ if __name__ == '__main__':
         class_mapping = json.load(f)
     logger.info(f"Loaded {len(class_mapping)} class mappings")
 
-    if args.model == 'resnet50':
-        n_components = args.n_components or 10000
-        train_resnet50(
-            train_df=train_df,
-            class_mapping=class_mapping,
-            output_path=args.output,
-            layer_name=args.layer_name,
-            pool_size=args.pool_size,
-            n_components=n_components,
-            batch_size=args.batch_size,
-            cache_dir=args.cache_dir,
-            force=args.force
-        )
-    else:  # megadescriptor
-        n_components = args.n_components or 1024
-        train_megadescriptor(
-            train_df=train_df,
-            class_mapping=class_mapping,
-            output_path=args.output,
-            n_components=n_components,
-            batch_size=args.batch_size,
-            cache_dir=args.cache_dir,
-            force=args.force
-        )
+    train(
+        train_df=train_df,
+        class_mapping=class_mapping,
+        output_path=args.output,
+        layer_name=args.layer_name,
+        pool_size=args.pool_size,
+        n_components=args.n_components,
+        batch_size=args.batch_size,
+        cache_dir=args.cache_dir,
+        force=args.force,
+        device=args.device
+    )
+
