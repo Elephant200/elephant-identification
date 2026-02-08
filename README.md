@@ -2,7 +2,7 @@
 
 ![African Elephant](https://africageographic.com/wp-content/uploads/2020/01/Guest-Dr.jpg)
 
-Please see [github.com/Elephant200/elephant-reidentification](https://github.com/Elephant200/elephant-reidentification) for the updated project, which uses computer vision to automatically generate SEEK encodings.
+Please see [github.com/Elephant200/elephant-reidentification](https://github.com/Elephant200/elephant-re-identification) for the updated project, which uses computer vision to automatically generate SEEK encodings.
 
 ## Background
 
@@ -39,7 +39,7 @@ Both methods are trained and evaluated on the ELPephants dataset (Körschens & D
 
 ## Project Status
 
-This project is closed. I have currently achieved 61% top-1 accuracy and 96.7% top-10 accuracy using the ResNet50 deep feature extractor on smaller sets of data. Please see [github.com/Elephant200/elephant-reidentification](https://github.com/Elephant200/elephant-reidentification) for the updated project, which uses computer vision to automatically generate SEEK encodings.
+This project is closed. I have currently achieved 61% top-1 accuracy and 96.7% top-10 accuracy using the ResNet50 deep feature extractor on smaller sets of data. Please see [github.com/Elephant200/elephant-reidentification](https://github.com/Elephant200/elephant-re-identification) for the updated project, which uses computer vision to automatically generate SEEK encodings.
 
 ## Acknowledgements
 
