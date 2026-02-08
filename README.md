@@ -2,6 +2,8 @@
 
 ![African Elephant](https://africageographic.com/wp-content/uploads/2020/01/Guest-Dr.jpg)
 
+Please see [github.com/Elephant200/elephant-reidentification](https://github.com/Elephant200/elephant-reidentification) for the updated project, which uses computer vision to automatically generate SEEK encodings.
+
 ## Background
 
 Reliable individual identification is fundamental to elephant conservation. Long-term population monitoring, tracking social dynamics, understanding movement patterns, and measuring the effectiveness of anti-poaching efforts all depend on our ability to recognize specific animals across time and space. Historically, this has meant either invasive tagging methods or manual identification by experts who memorize ear notches, tusk shapes, and vein patterns across hundreds of individuals. Neither scales well.
@@ -37,7 +39,7 @@ Both methods are trained and evaluated on the ELPephants dataset (Körschens & D
 
 ## Project Status
 
-This is an active research project. Both identification pipelines are functional but ongoing work focuses on improving robustness, testing ensemble methods, and evaluating performance across different image quality conditions. I have currently achieved 68% top-1 accuracy and 96.7% top-10 accuracy using the ResNet50 deep feature extractor.
+This project is closed. I have currently achieved 61% top-1 accuracy and 96.7% top-10 accuracy using the ResNet50 deep feature extractor on smaller sets of data. Please see [github.com/Elephant200/elephant-reidentification](https://github.com/Elephant200/elephant-reidentification) for the updated project, which uses computer vision to automatically generate SEEK encodings.
 
 ## Acknowledgements
 
