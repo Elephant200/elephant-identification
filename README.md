@@ -2,7 +2,7 @@
 
 ![African Elephant](https://africageographic.com/wp-content/uploads/2020/01/Guest-Dr.jpg)
 
-Please see [github.com/Elephant200/elephant-reidentification](https://github.com/Elephant200/elephant-re-identification) for the updated project, which uses computer vision to automatically generate SEEK encodings.
+Please see [github.com/Elephant200/elephant-id](https://github.com/Elephant200/elephant-id) for the updated project, which uses computer vision to automatically generate SEEK encodings.
 
 ## Background
 
